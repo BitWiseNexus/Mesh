@@ -1,0 +1,10 @@
+rules_version = '2';
+
+// Uploads go through the backend for now.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

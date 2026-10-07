@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// The backend (firebase-admin) bypasses these rules. Clients get read-only access to their own
+// flows and runs (for live run status via onSnapshot); all writes go through the API.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /flows/{flowId} {
+      allow read: if request.auth != null && resource.data.owner_uid == request.auth.uid;
+      allow write: if false;
+    }
+    match /runs/{runId} {
+      allow read: if request.auth != null && resource.data.owner_uid == request.auth.uid;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
