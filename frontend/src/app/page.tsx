@@ -1,5 +1,7 @@
+import Link from "next/link";
+
 import { BackendStatus } from "@/components/backend-status";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function Home() {
   return (
@@ -9,7 +11,10 @@ export default function Home() {
       <p className="max-w-md text-muted-foreground">
         Build, run and watch multi-agent AI workflows on a visual canvas.
       </p>
-      <Button disabled>Open canvas (coming soon)</Button>
+      {/* A real link (not Button render=Link, which would get role="button"). */}
+      <Link href="/canvas" className={buttonVariants({ size: "lg" })}>
+        Open canvas
+      </Link>
     </main>
   );
 }
