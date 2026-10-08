@@ -9,6 +9,8 @@ import { NODE_REGISTRY, nodeDisplayName, type FieldDef } from "@/lib/nodes/regis
 import type { NodeData } from "@/types/flow";
 
 import type { CanvasEdge, CanvasNode } from "./graph";
+import { parseTemplate } from "./references";
+import { findReferencedNode, upstreamNodeIds } from "./refs";
 
 export type IssueSeverity = "error" | "warning";
 
@@ -152,12 +154,52 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
           field: field.key,
           message: `${name(node)}: ${field.label} ${problem}`,
         });
+        continue;
+      }
+      if (field.templated && typeof value === "string") {
+        const refProblem = referenceProblem(value, node, nodes, edges, name);
+        if (refProblem) {
+          issues.push({
+            id: `reference:${node.id}:${field.key}`,
+            severity: "error",
+            nodeId: node.id,
+            field: field.key,
+            message: `${name(node)}: ${field.label} ${refProblem}`,
+          });
+        }
       }
     }
   }
 
   // Errors first, otherwise keep canvas order.
   return issues.sort((a, b) => Number(a.severity === "warning") - Number(b.severity === "warning"));
+}
+
+/**
+ * The first problem with the {{references}} in a templated value, or null. A reference must be
+ * well-formed and point at a node whose output exists by the time this node runs.
+ */
+function referenceProblem(
+  value: string,
+  node: CanvasNode,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+  name: (n: CanvasNode) => string,
+): string | null {
+  let upstream: Set<string> | null = null; // computed lazily: most fields have no references
+  for (const part of parseTemplate(value)) {
+    if (part.kind === "invalid") return `has an invalid reference ${part.raw}`;
+    if (part.kind !== "ref") continue;
+    const token = `{{${part.node}.output}}`;
+    const target = findReferencedNode(part.node, nodes);
+    if (!target) return `refers to ${token}, but no node is called “${part.node}”`;
+    if (target.id === node.id) return `refers to this node's own output (${token})`;
+    upstream ??= new Set(upstreamNodeIds(node.id, edges));
+    if (!upstream.has(target.id)) {
+      return `refers to ${name(target)}, which doesn't run before this node`;
+    }
+  }
+  return null;
 }
 
 /** Groups issues by node id. */

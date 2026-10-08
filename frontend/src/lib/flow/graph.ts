@@ -16,7 +16,9 @@ import {
   type NodeType,
 } from "@/types/flow";
 
-export type CanvasNode = Node<NodeData, NodeType>;
+import { normalizeRefs } from "./refs";
+
+export type CanvasNode = Node<NodeData, NodeType> & { ref?: string };
 export type CanvasEdge = Edge<Record<string, unknown>, EdgeType>;
 
 export type FlowMeta = Pick<Flow, "flow_id" | "name" | "description">;
@@ -36,6 +38,7 @@ export function toFlow(meta: FlowMeta, nodes: CanvasNode[], edges: CanvasEdge[])
       (n): FlowNode => ({
         id: n.id,
         type: n.type as NodeType,
+        ref: n.ref,
         data: n.data,
         position: { x: n.position.x, y: n.position.y },
       }),
@@ -56,12 +59,16 @@ export function toFlow(meta: FlowMeta, nodes: CanvasNode[], edges: CanvasEdge[])
 
 export function fromFlow(flow: Flow): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
   return {
-    nodes: flow.nodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      data: n.data,
-      position: n.position,
-    })),
+    // Every canvas node has a valid, unique ref (older flows and imports may lack them).
+    nodes: normalizeRefs(
+      flow.nodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        ref: n.ref,
+        data: n.data,
+        position: n.position,
+      })),
+    ),
     edges: flow.edges.map((e) => ({
       id: e.id,
       source: e.source,
@@ -216,6 +223,7 @@ export function parseFlowJson(text: string): ParseResult {
     nodes.push({
       id: n.id,
       type: n.type as NodeType,
+      ref: typeof n.ref === "string" ? n.ref : undefined, // repaired by normalizeRefs on load
       data: isObject(n.data) ? (n.data as NodeData) : {},
       position: { x: pos.x, y: pos.y },
     });

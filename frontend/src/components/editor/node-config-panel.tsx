@@ -9,12 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { formatReference } from "@/lib/flow/references";
 import type { FlowIssue } from "@/lib/flow/validate";
 import { CATEGORIES, NODE_REGISTRY } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
 import { ConfigField } from "./config-fields";
+import { RefField } from "./ref-field";
 
 const NO_ISSUES: FlowIssue[] = [];
 
@@ -51,9 +53,10 @@ export function NodeConfigPanel() {
   const category = CATEGORIES[def.category];
   const Icon = def.icon;
 
-  const copyId = async () => {
-    await navigator.clipboard.writeText(node.id);
-    toast.success("Node id copied");
+  const reference = formatReference(node.ref ?? node.id);
+  const copyReference = async () => {
+    await navigator.clipboard.writeText(reference);
+    toast.success(`Copied ${reference}`);
   };
 
   return (
@@ -90,6 +93,8 @@ export function NodeConfigPanel() {
             />
           </div>
 
+          {node.ref && <RefField nodeId={node.id} current={node.ref} />}
+
           {def.fields.length > 0 && <Separator />}
 
           {def.fields.map((field) => (
@@ -99,6 +104,7 @@ export function NodeConfigPanel() {
               value={node.data[field.key]}
               onChange={(value) => updateNodeData(node.id, { [field.key]: value })}
               invalid={issues.some((i) => i.field === field.key)}
+              nodeId={node.id}
             />
           ))}
 
@@ -114,12 +120,12 @@ export function NodeConfigPanel() {
       <div className="flex items-center gap-2 border-t p-3">
         <button
           type="button"
-          onClick={copyId}
+          onClick={copyReference}
           className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-mono text-xs text-muted-foreground hover:text-foreground"
-          title="Copy node id (use in templates as {{id.output}})"
+          title="Copy this node's reference, to paste into another node's settings"
         >
           <Copy className="size-3 shrink-0" />
-          {node.id}
+          {reference}
         </button>
         <Button variant="destructive" size="sm" onClick={() => deleteNode(node.id)}>
           <Trash2 />

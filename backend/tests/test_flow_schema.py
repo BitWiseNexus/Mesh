@@ -171,3 +171,30 @@ def test_every_node_type_has_a_category() -> None:
         assert isinstance(category_of(node_type), NodeCategory)
     assert category_of(NodeType.HITL_APPROVAL) is NodeCategory.LOGIC
     assert category_of(NodeType.OUTPUT_DISPLAY) is NodeCategory.ACTION
+
+
+def test_node_refs_round_trip_and_are_optional() -> None:
+    raw = make_flow(nodes=[{**node("a"), "ref": "agent"}, node("b")], edges=[])
+    flow = Flow.model_validate(raw)
+    assert flow.node("a").ref == "agent"
+    assert flow.node("b").ref is None
+    assert flow.model_dump(mode="json")["nodes"][0]["ref"] == "agent"
+
+
+@pytest.mark.parametrize(
+    ("refs", "message"),
+    [
+        (["agent", "agent"], "duplicate node refs: ['agent']"),
+        (["input", "b"], "reserved node refs: ['input']"),
+        (["b", "x"], "equal another node's id: ['b']"),
+        (["Agent", "x"], "String should match pattern"),
+        (["9lives", "x"], "String should match pattern"),
+        (["a" * 41, "x"], "String should match pattern"),
+    ],
+    ids=["duplicate", "reserved", "clashes-with-id", "uppercase", "leading-digit", "too-long"],
+)
+def test_invalid_node_refs_are_rejected(refs: list[str], message: str) -> None:
+    nodes = [{**node("a"), "ref": refs[0]}, {**node("b"), "ref": refs[1]}]
+    with pytest.raises(ValidationError) as exc:
+        Flow.model_validate(make_flow(nodes=nodes, edges=[]))
+    assert message in str(exc.value)

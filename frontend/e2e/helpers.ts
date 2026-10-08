@@ -168,6 +168,8 @@ export async function importFixture(editor: Editor) {
   await editor.page.locator("input[name=import-into-flow]").setInputFiles(FIXTURE);
   await editor.page.getByRole("button", { name: "Replace" }).click();
   await expect(editor.nodes).toHaveCount(4);
+  // Wait for the dialog (and its fading backdrop) to be gone: forced drops would land on it.
+  await expect(editor.page.getByRole("alertdialog")).toHaveCount(0);
 }
 
 /**

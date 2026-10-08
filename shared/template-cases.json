@@ -1,0 +1,89 @@
+{
+  "$comment": "Shared test vectors for template parsing/renaming. Both frontend (src/lib/flow/templates.ts) and backend (app/engine/templates.py) must produce exactly these results. Parts: text | ref (node = ref or node id, path after .output) | input (path after input) | invalid (raw token).",
+  "parse": [
+    { "text": "", "parts": [] },
+    { "text": "plain text", "parts": [{ "kind": "text", "value": "plain text" }] },
+    {
+      "text": "Hi {{input}}!",
+      "parts": [
+        { "kind": "text", "value": "Hi " },
+        { "kind": "input", "path": [] },
+        { "kind": "text", "value": "!" }
+      ]
+    },
+    {
+      "text": "{{agent.output}}",
+      "parts": [{ "kind": "ref", "node": "agent", "path": [] }]
+    },
+    {
+      "text": "{{ agent_2.output.summary }} and {{api.output.items.0.name}}",
+      "parts": [
+        { "kind": "ref", "node": "agent_2", "path": ["summary"] },
+        { "kind": "text", "value": " and " },
+        { "kind": "ref", "node": "api", "path": ["items", "0", "name"] }
+      ]
+    },
+    {
+      "text": "{{input.title}}",
+      "parts": [{ "kind": "input", "path": ["title"] }]
+    },
+    {
+      "text": "legacy {{node_8203befa.output}}",
+      "parts": [
+        { "kind": "text", "value": "legacy " },
+        { "kind": "ref", "node": "node_8203befa", "path": [] }
+      ]
+    },
+    {
+      "text": "{{agent}} {{agent.result}} {{.output}} {{agent.output.}} {{}} {{agent.output.a-b}}",
+      "parts": [
+        { "kind": "invalid", "raw": "{{agent}}" },
+        { "kind": "text", "value": " " },
+        { "kind": "invalid", "raw": "{{agent.result}}" },
+        { "kind": "text", "value": " " },
+        { "kind": "invalid", "raw": "{{.output}}" },
+        { "kind": "text", "value": " " },
+        { "kind": "invalid", "raw": "{{agent.output.}}" },
+        { "kind": "text", "value": " " },
+        { "kind": "invalid", "raw": "{{}}" },
+        { "kind": "text", "value": " " },
+        { "kind": "invalid", "raw": "{{agent.output.a-b}}" }
+      ]
+    },
+    {
+      "text": "a { b } {single} {{x.output}}{{input}}",
+      "parts": [
+        { "kind": "text", "value": "a { b } {single} " },
+        { "kind": "ref", "node": "x", "path": [] },
+        { "kind": "input", "path": [] }
+      ]
+    },
+    {
+      "text": "unclosed {{agent.output",
+      "parts": [{ "kind": "text", "value": "unclosed {{agent.output" }]
+    },
+    {
+      "text": "multi\nline {{Agent.output}}",
+      "parts": [
+        { "kind": "text", "value": "multi\nline " },
+        { "kind": "invalid", "raw": "{{Agent.output}}" }
+      ]
+    }
+  ],
+  "rename": [
+    { "text": "{{agent.output}}", "from": "agent", "to": "parser", "result": "{{parser.output}}" },
+    {
+      "text": "A {{ agent.output.x }} B {{agent_2.output}} C {{input}}",
+      "from": "agent",
+      "to": "lead",
+      "result": "A {{lead.output.x}} B {{agent_2.output}} C {{input}}"
+    },
+    { "text": "no refs here", "from": "agent", "to": "lead", "result": "no refs here" },
+    {
+      "text": "{{agent}} stays invalid",
+      "from": "agent",
+      "to": "lead",
+      "result": "{{agent}} stays invalid"
+    }
+  ]
+}

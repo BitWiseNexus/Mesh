@@ -125,3 +125,65 @@ describe("issuesByNode", () => {
     expect(Object.keys(issuesByNode(issues))).toEqual(["s"]);
   });
 });
+
+describe("template references", () => {
+  const withRef = (id: string, type: NodeType, ref: string, data?: NodeData): CanvasNode => ({
+    ...node(id, type, data),
+    ref,
+  });
+  // trigger → agent → if; agent.tools → api
+  const base = () => [
+    withRef("t", "trigger_manual", "trigger"),
+    withRef("a", "agent_node", "agent"),
+    withRef("api", "tool_http", "api"),
+  ];
+  const edges = [
+    edge("t", "a"),
+    edge("a", "api", "tools", "tool_connection"),
+  ];
+  const ifNode = (field: string) =>
+    withRef("i", "logic_if", "if", { ...createDefaultData("logic_if"), field });
+  const issuesFor = (field: string) =>
+    validateFlow([...base(), ifNode(field)], [...edges, edge("a", "i")]).filter(
+      (i) => i.id === "reference:i:field",
+    );
+
+  it.each([
+    "{{input}}",
+    "{{agent.output}}",
+    "{{agent.output.summary}} and {{trigger.output}}",
+    "{{a.output}}", // by node id (older flows)
+  ])("accepts %s", (field) => {
+    expect(issuesFor(field)).toEqual([]);
+  });
+
+  it.each([
+    ["{{agent}}", "has an invalid reference {{agent}}"],
+    ["{{ghost.output}}", "no node is called “ghost”"],
+    ["{{if.output}}", "this node's own output"],
+    ["{{api.output}}", "“API Caller”, which doesn't run before this node"],
+  ])("rejects %s", (field, message) => {
+    const [issue] = issuesFor(field);
+    expect(issue).toMatchObject({ severity: "error", nodeId: "i", field: "field" });
+    expect(issue.message).toContain(message);
+  });
+
+  it("lets a tool reference what its agent can see, but not the agent itself", () => {
+    const api = (url: string) =>
+      withRef("api", "tool_http", "api", { ...createDefaultData("tool_http"), url });
+    const run = (url: string) =>
+      validateFlow([base()[0], base()[1], api(url)], edges).filter((i) =>
+        i.id.startsWith("reference:api"),
+      );
+    expect(run("https://x.io/{{trigger.output}}")).toEqual([]);
+    expect(run("https://x.io/{{agent.output}}")[0].message).toContain("doesn't run before");
+  });
+
+  it("only checks templated fields", () => {
+    const hook = withRef("w", "trigger_webhook", "webhook", {
+      ...createDefaultData("trigger_webhook"),
+      secret: "{{nonsense}}",
+    });
+    expect(validateFlow([hook], []).some((i) => i.id.startsWith("reference:"))).toBe(false);
+  });
+});

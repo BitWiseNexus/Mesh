@@ -136,8 +136,12 @@ describe("toFlow / fromFlow", () => {
       animated: false,
     });
 
+    // Loading gives ref-less nodes a ref (from their type); after that the round trip is exact.
     const back = fromFlow(flow);
-    expect(toFlow(meta, back.nodes, back.edges)).toEqual(flow);
+    expect(back.nodes.map((n) => n.ref)).toEqual(["trigger", "agent"]);
+    const withRefs = toFlow(meta, back.nodes, back.edges);
+    const again = fromFlow(withRefs);
+    expect(toFlow(meta, again.nodes, again.edges)).toEqual(withRefs);
   });
 });
 

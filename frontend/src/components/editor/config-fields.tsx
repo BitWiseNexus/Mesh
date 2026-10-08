@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +16,16 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FieldDef } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
 
+import { ReferencePicker } from "./reference-picker";
+
 interface FieldProps<F extends FieldDef = FieldDef> {
   field: F;
   value: unknown;
   onChange: (value: unknown) => void;
   /** Set when flow validation reports a problem with this field. */
   invalid?: boolean;
+  /** The node being edited — enables the reference picker on templated fields. */
+  nodeId?: string;
 }
 
 type Of<K extends FieldDef["kind"]> = Extract<FieldDef, { kind: K }>;
@@ -97,9 +101,26 @@ function JsonInput({ field, value, onChange, id }: FieldProps<Of<"json">> & { id
   );
 }
 
-export function ConfigField({ field, value, onChange, invalid }: FieldProps) {
+export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldProps) {
   const id = useId();
   const listId = `${id}-suggestions`;
+  // Text fields remember the caret/selection so a picked reference goes where the user was.
+  const textRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const selection = useRef<[number, number] | null>(null);
+  const rememberSelection = () => {
+    const el = textRef.current;
+    if (el) selection.current = [el.selectionStart ?? el.value.length, el.selectionEnd ?? el.value.length];
+  };
+  const insertToken = (token: string) => {
+    const text = typeof value === "string" ? value : "";
+    const [start, end] = selection.current ?? [text.length, text.length];
+    onChange(text.slice(0, start) + token + text.slice(end));
+    const caret = start + token.length;
+    selection.current = [caret, caret];
+    // Focus comes back to the field when the menu closes; put the caret after the insertion.
+    requestAnimationFrame(() => textRef.current?.setSelectionRange(caret, caret));
+  };
+  const textHandlers = { ref: textRef, onSelect: rememberSelection, onBlur: rememberSelection };
   const a11y = {
     "aria-invalid": invalid || undefined,
     "aria-required": field.required || undefined,
@@ -124,6 +145,7 @@ export function ConfigField({ field, value, onChange, invalid }: FieldProps) {
           <Input
             id={id}
             {...a11y}
+            {...textHandlers}
             value={typeof value === "string" ? value : ""}
             placeholder={field.placeholder}
             list={field.suggestions ? listId : undefined}
@@ -145,6 +167,7 @@ export function ConfigField({ field, value, onChange, invalid }: FieldProps) {
         <Textarea
           id={id}
           {...a11y}
+          {...textHandlers}
           rows={field.rows ?? 3}
           value={typeof value === "string" ? value : ""}
           placeholder={field.placeholder}
@@ -186,14 +209,24 @@ export function ConfigField({ field, value, onChange, invalid }: FieldProps) {
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>
-        {field.label}
-        {field.required && (
-          <span aria-hidden className="-ml-1 text-destructive">
-            *
-          </span>
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={id}>
+          {field.label}
+          {field.required && (
+            <span aria-hidden className="-ml-1 text-destructive">
+              *
+            </span>
+          )}
+        </Label>
+        {field.templated && nodeId && (
+          <ReferencePicker
+            nodeId={nodeId}
+            fieldLabel={field.label}
+            fieldRef={textRef}
+            onInsert={insertToken}
+          />
         )}
-      </Label>
+      </div>
       {control}
       {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
     </div>

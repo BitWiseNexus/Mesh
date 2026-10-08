@@ -298,3 +298,69 @@ describe("flow store", () => {
     });
   });
 });
+
+describe("node refs", () => {
+  beforeEach(() => store().newFlow("blank"));
+
+  it("gives new nodes readable unique refs", () => {
+    store().addNode("agent_node", { x: 0, y: 0 });
+    store().addNode("agent_node", { x: 0, y: 100 });
+    store().addNode("tool_http", { x: 0, y: 200 });
+    expect(store().nodes.map((n) => n.ref)).toEqual(["agent", "agent_2", "api"]);
+  });
+
+  it("renames a ref and rewrites references to it, as one undoable step", () => {
+    const agent = store().addNode("agent_node", { x: 0, y: 0 });
+    const mail = store().addNode("action_email", { x: 0, y: 100 });
+    store().updateNodeData(mail, {
+      subject: "Lead: {{agent.output.name}}",
+      body: "{{agent.output}} / {{agent_2.output}} / {{input}}",
+      to: "{{agent.output}}",
+    });
+    // Non-templated fields are left alone.
+    store().updateNodeData(agent, { system_prompt: "Uses {{agent.output}} literally" });
+
+    expect(store().renameRef(agent, "parser")).toBeNull();
+    const node = (id: string) => store().nodes.find((n) => n.id === id)!;
+    expect(node(agent).ref).toBe("parser");
+    expect(node(mail).data).toMatchObject({
+      subject: "Lead: {{parser.output.name}}",
+      body: "{{parser.output}} / {{agent_2.output}} / {{input}}",
+      to: "{{parser.output}}",
+    });
+    // system_prompt *is* templated, so it's rewritten too.
+    expect(node(agent).data.system_prompt).toBe("Uses {{parser.output}} literally");
+
+    store().undo();
+    expect(node(agent).ref).toBe("agent");
+    expect(node(mail).data.subject).toBe("Lead: {{agent.output.name}}");
+  });
+
+  it("refuses names that are invalid or taken, changing nothing", () => {
+    const a = store().addNode("agent_node", { x: 0, y: 0 });
+    store().addNode("tool_http", { x: 0, y: 100 });
+    const before = store().past.length;
+    expect(store().renameRef(a, "api")).toContain("already called");
+    expect(store().renameRef(a, "Not Valid")).toContain("lowercase");
+    expect(store().nodes[0].ref).toBe("agent");
+    expect(store().past.length).toBe(before);
+  });
+
+  it("assigns refs to flows saved before refs existed, without marking them unsaved", () => {
+    store().loadFlow({
+      schema_version: 1,
+      flow_id: "f1",
+      name: "Old",
+      description: "",
+      version: 3,
+      nodes: [
+        { id: "n1", type: "trigger_manual", data: {}, position: { x: 0, y: 0 } },
+        { id: "n2", type: "agent_node", data: {}, position: { x: 1, y: 0 } },
+      ],
+      edges: [],
+    });
+    expect(store().nodes.map((n) => n.ref)).toEqual(["trigger", "agent"]);
+    expect(store().dirty).toBe(false);
+    expect(store().toFlow().nodes.map((n) => n.ref)).toEqual(["trigger", "agent"]);
+  });
+});

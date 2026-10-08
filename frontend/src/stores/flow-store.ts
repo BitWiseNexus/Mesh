@@ -22,9 +22,11 @@ import {
   type ConnectionCheck,
 } from "@/lib/flow/graph";
 import { contentFingerprint } from "@/lib/flow/fingerprint";
+import { renameReferences } from "@/lib/flow/references";
+import { refProblem, uniqueRef } from "@/lib/flow/refs";
 import { createFlowFromTemplate, type FlowTemplate } from "@/lib/flow/templates";
 import { issuesByNode, validateFlow, type FlowIssue } from "@/lib/flow/validate";
-import { createDefaultData } from "@/lib/nodes/registry";
+import { createDefaultData, NODE_REGISTRY } from "@/lib/nodes/registry";
 import type { Flow, NodeData, NodeType } from "@/types/flow";
 
 const HISTORY_LIMIT = 100;
@@ -215,6 +217,11 @@ interface FlowState {
   // Graph edits
   addNode: (type: NodeType, position: XYPosition) => string;
   updateNodeData: (id: string, patch: Partial<NodeData>) => void;
+  /**
+   * Renames a node's ref and rewrites every `{{oldRef.output…}}` in templated fields to match.
+   * Returns a user-facing problem (and changes nothing) if the name can't be used.
+   */
+  renameRef: (id: string, ref: string) => string | null;
   deleteNode: (id: string) => void;
   selectNode: (id: string | null) => void;
   setMeta: (meta: Partial<{ name: string; description: string }>) => void;
@@ -249,7 +256,9 @@ const RESET = {
 function stateFromFlow(flow: Flow & { version?: number }) {
   const { nodes, edges } = fromFlow(flow);
   const issues = validateFlow(nodes, edges);
-  const fingerprint = contentFingerprint(flow);
+  // Fingerprint the *normalised* content (e.g. refs filled in for older flows), so loading alone
+  // never makes a flow look unsaved.
+  const fingerprint = contentFingerprint({ ...flow, nodes: toFlow(flow, nodes, edges).nodes });
   return {
     fingerprint,
     savedFingerprint: fingerprint,
@@ -313,7 +322,16 @@ export const useFlowStore = create<FlowState>()(
       addNode: (type, position) => {
         get().snapshot();
         const id = newId("node");
-        const node: CanvasNode = { id, type, position, data: createDefaultData(type), selected: true };
+        const taken = get().nodes.flatMap((n) => [n.id, n.ref ?? ""]);
+        const ref = uniqueRef(NODE_REGISTRY[type].refPrefix, taken);
+        const node: CanvasNode = {
+          id,
+          type,
+          ref,
+          position,
+          data: createDefaultData(type),
+          selected: true,
+        };
         const nodes = get().nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
         set({ nodes: [...nodes, node], selectedNodeId: id });
         return id;
@@ -326,6 +344,33 @@ export const useFlowStore = create<FlowState>()(
             n.id === id ? { ...n, data: { ...n.data, ...patch } as NodeData } : n,
           ),
         });
+      },
+
+      renameRef: (id, ref) => {
+        const { nodes } = get();
+        const node = nodes.find((n) => n.id === id);
+        if (!node) return "Node not found.";
+        if (node.ref === ref) return null;
+        const problem = refProblem(ref, id, nodes);
+        if (problem) return problem;
+        const oldRef = node.ref;
+        get().snapshot();
+        set({
+          nodes: nodes.map((n) => {
+            const renamed = n.id === id ? { ...n, ref } : n;
+            if (!oldRef) return renamed;
+            // Rewrite references in this node's templated fields.
+            let data = renamed.data;
+            for (const field of NODE_REGISTRY[n.type].fields) {
+              const value = data[field.key];
+              if (!field.templated || typeof value !== "string") continue;
+              const next = renameReferences(value, oldRef, ref);
+              if (next !== value) data = { ...data, [field.key]: next };
+            }
+            return data === renamed.data ? renamed : { ...renamed, data };
+          }),
+        });
+        return null;
       },
 
       deleteNode: (id) => {

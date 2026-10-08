@@ -16,6 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.node_types import NodeType
 
+#: A node ref: lowercase identifier, at most 40 characters.
+REF_PATTERN = r"^[a-z][a-z0-9_]{0,39}$"
+#: Can't be a node ref: `{{input.x}}` already means "the previous node's output".
+RESERVED_REFS = frozenset({"input"})
+
 MAX_NODES = 500
 MAX_EDGES = 2000
 
@@ -35,6 +40,9 @@ class Node(BaseModel):
 
     id: str = Field(min_length=1)
     type: NodeType
+    #: Readable, unique name used in template references (`{{agent.output}}`). Optional for flows
+    #: saved before refs existed; the editor assigns one to every node it loads.
+    ref: str | None = Field(default=None, pattern=REF_PATTERN)
     data: dict[str, Any] = Field(default_factory=dict)
     position: Position
 
@@ -79,6 +87,15 @@ class Flow(BaseModel):
 
         if dupes := sorted(i for i, c in Counter(e.id for e in self.edges).items() if c > 1):
             errors.append(f"duplicate edge ids: {dupes}")
+
+        refs = [n.ref for n in self.nodes if n.ref is not None]
+        if dupes := sorted(r for r, c in Counter(refs).items() if c > 1):
+            errors.append(f"duplicate node refs: {dupes}")
+        if reserved := sorted(set(refs) & RESERVED_REFS):
+            errors.append(f"reserved node refs: {reserved}")
+        # A ref equal to another node's id would make {{that.output}} ambiguous.
+        if clashes := sorted(n.ref for n in self.nodes if n.ref in set(node_ids) - {n.id}):
+            errors.append(f"node refs that equal another node's id: {clashes}")
 
         known = set(node_ids)
         seen_connections: set[tuple] = set()

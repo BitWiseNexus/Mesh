@@ -1,0 +1,1088 @@
+{
+  "$comment": "GENERATED from backend/app/nodes/catalog.py by `uv run python -m app.nodes.export_catalog`. Do not edit by hand.",
+  "nodes": [
+    {
+      "type": "trigger_manual",
+      "category": "trigger",
+      "label": "Manual Trigger",
+      "description": "Start the flow with a button click, optionally with input text.",
+      "refPrefix": "trigger",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "input": ""
+      },
+      "fields": [
+        {
+          "key": "input",
+          "label": "Default input",
+          "kind": "textarea",
+          "help": "Text passed into the flow when you press Run.",
+          "required": false,
+          "templated": false
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "trigger_webhook",
+      "category": "trigger",
+      "label": "Webhook",
+      "description": "Start the flow when an HTTP request hits this flow's URL.",
+      "refPrefix": "webhook",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "method": "POST",
+        "secret": ""
+      },
+      "fields": [
+        {
+          "key": "method",
+          "label": "Method",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "POST",
+              "label": "POST"
+            },
+            {
+              "value": "GET",
+              "label": "GET"
+            },
+            {
+              "value": "PUT",
+              "label": "PUT"
+            }
+          ]
+        },
+        {
+          "key": "secret",
+          "label": "Secret",
+          "kind": "text",
+          "help": "Optional. Callers must send it in the X-Mesh-Secret header.",
+          "required": false,
+          "templated": false
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "trigger_cron",
+      "category": "trigger",
+      "label": "Schedule",
+      "description": "Run on a cron schedule.",
+      "refPrefix": "schedule",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "cron": "0 9 * * *",
+        "timezone": "UTC"
+      },
+      "fields": [
+        {
+          "key": "cron",
+          "label": "Cron expression",
+          "kind": "text",
+          "help": "e.g. 0 9 * * 1-5 = 9:00 on weekdays",
+          "required": true,
+          "templated": false
+        },
+        {
+          "key": "timezone",
+          "label": "Timezone",
+          "kind": "text",
+          "placeholder": "UTC",
+          "required": false,
+          "templated": false
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "trigger_email",
+      "category": "trigger",
+      "label": "Email Listener",
+      "description": "Start the flow when an email arrives.",
+      "refPrefix": "inbox",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "filter_from": "",
+        "filter_subject": ""
+      },
+      "fields": [
+        {
+          "key": "filter_from",
+          "label": "From contains",
+          "kind": "text",
+          "required": false,
+          "templated": false
+        },
+        {
+          "key": "filter_subject",
+          "label": "Subject contains",
+          "kind": "text",
+          "required": false,
+          "templated": false
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "agent_node",
+      "category": "agent",
+      "label": "Agent",
+      "description": "An LLM with a system prompt that can call connected tools.",
+      "refPrefix": "agent",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        },
+        {
+          "id": "tools",
+          "kind": "tool",
+          "label": "Tools"
+        }
+      ],
+      "defaultData": {
+        "model": "gpt-4o",
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tool_steps": 5
+      },
+      "fields": [
+        {
+          "key": "model",
+          "label": "Model",
+          "kind": "text",
+          "required": true,
+          "templated": false,
+          "suggestions": [
+            "gpt-4o",
+            "gpt-4o-mini",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-4-5",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash"
+          ]
+        },
+        {
+          "key": "system_prompt",
+          "label": "System prompt",
+          "kind": "textarea",
+          "placeholder": "You are a helpful assistant…",
+          "required": false,
+          "templated": true,
+          "rows": 6
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 0,
+          "max": 2,
+          "step": 0.1
+        },
+        {
+          "key": "max_tool_steps",
+          "label": "Max tool steps",
+          "kind": "number",
+          "help": "Upper bound on tool calls per run.",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 25,
+          "step": 1
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "agent_supervisor",
+      "category": "agent",
+      "label": "Supervisor Agent",
+      "description": "Delegates sub-tasks to connected worker agents and combines their results.",
+      "refPrefix": "supervisor",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        },
+        {
+          "id": "tools",
+          "kind": "tool",
+          "label": "Tools"
+        }
+      ],
+      "defaultData": {
+        "model": "gpt-4o",
+        "system_prompt": "",
+        "temperature": 0.3,
+        "max_rounds": 5
+      },
+      "fields": [
+        {
+          "key": "model",
+          "label": "Model",
+          "kind": "text",
+          "required": true,
+          "templated": false,
+          "suggestions": [
+            "gpt-4o",
+            "gpt-4o-mini",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-4-5",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash"
+          ]
+        },
+        {
+          "key": "system_prompt",
+          "label": "System prompt",
+          "kind": "textarea",
+          "placeholder": "You are a helpful assistant…",
+          "required": false,
+          "templated": true,
+          "rows": 6
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 0,
+          "max": 2,
+          "step": 0.1
+        },
+        {
+          "key": "max_rounds",
+          "label": "Max delegation rounds",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 20,
+          "step": 1
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "tool_web_search",
+      "category": "tool",
+      "label": "Web Search",
+      "description": "Search the web (Tavily or DuckDuckGo).",
+      "refPrefix": "web_search",
+      "inputs": [
+        {
+          "id": "tool",
+          "kind": "tool"
+        }
+      ],
+      "outputs": [],
+      "defaultData": {
+        "provider": "tavily",
+        "max_results": 5
+      },
+      "fields": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "tavily",
+              "label": "Tavily"
+            },
+            {
+              "value": "duckduckgo",
+              "label": "DuckDuckGo"
+            }
+          ]
+        },
+        {
+          "key": "max_results",
+          "label": "Max results",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 20,
+          "step": 1
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "tool_web_scraper",
+      "category": "tool",
+      "label": "Web Scraper",
+      "description": "Fetch a URL and extract its readable content.",
+      "refPrefix": "scraper",
+      "inputs": [
+        {
+          "id": "tool",
+          "kind": "tool"
+        }
+      ],
+      "outputs": [],
+      "defaultData": {
+        "max_chars": 20000
+      },
+      "fields": [
+        {
+          "key": "max_chars",
+          "label": "Max characters",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 500,
+          "max": 200000,
+          "step": 500
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "tool_python",
+      "category": "tool",
+      "label": "Python Code",
+      "description": "Run Python code in a sandbox.",
+      "refPrefix": "python",
+      "inputs": [
+        {
+          "id": "tool",
+          "kind": "tool"
+        }
+      ],
+      "outputs": [],
+      "defaultData": {
+        "code": "",
+        "timeout_seconds": 30
+      },
+      "fields": [
+        {
+          "key": "code",
+          "label": "Code",
+          "kind": "code",
+          "placeholder": "def main(input: str) -> str:\n    return input.upper()",
+          "required": true,
+          "templated": false,
+          "rows": 10,
+          "language": "python"
+        },
+        {
+          "key": "timeout_seconds",
+          "label": "Timeout (s)",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 300,
+          "step": 1
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "tool_http",
+      "category": "tool",
+      "label": "API Caller",
+      "description": "Call a REST API endpoint.",
+      "refPrefix": "api",
+      "inputs": [
+        {
+          "id": "tool",
+          "kind": "tool"
+        }
+      ],
+      "outputs": [],
+      "defaultData": {
+        "method": "GET",
+        "url": "",
+        "headers": {},
+        "body": ""
+      },
+      "fields": [
+        {
+          "key": "method",
+          "label": "Method",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "GET",
+              "label": "GET"
+            },
+            {
+              "value": "POST",
+              "label": "POST"
+            },
+            {
+              "value": "PUT",
+              "label": "PUT"
+            },
+            {
+              "value": "PATCH",
+              "label": "PATCH"
+            },
+            {
+              "value": "DELETE",
+              "label": "DELETE"
+            }
+          ]
+        },
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "text",
+          "placeholder": "https://api.example.com/items",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "headers",
+          "label": "Headers",
+          "kind": "json",
+          "required": false,
+          "templated": false,
+          "rows": 4,
+          "shape": "object"
+        },
+        {
+          "key": "body",
+          "label": "Body",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "kb_upload",
+      "category": "knowledge",
+      "label": "Document Upload",
+      "description": "Upload PDFs or text into a knowledge base.",
+      "refPrefix": "upload",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "knowledge_base_id": null,
+        "chunk_size": 1000,
+        "chunk_overlap": 200
+      },
+      "fields": [
+        {
+          "key": "chunk_size",
+          "label": "Chunk size",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 100,
+          "max": 8000,
+          "step": 100
+        },
+        {
+          "key": "chunk_overlap",
+          "label": "Chunk overlap",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 0,
+          "max": 2000,
+          "step": 50
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "kb_retriever",
+      "category": "knowledge",
+      "label": "Retriever",
+      "description": "Find relevant chunks in a knowledge base. Works as a step or an agent tool.",
+      "refPrefix": "retriever",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        },
+        {
+          "id": "tool",
+          "kind": "tool"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "knowledge_base_id": null,
+        "top_k": 4
+      },
+      "fields": [
+        {
+          "key": "top_k",
+          "label": "Results (top k)",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 20,
+          "step": 1
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "kb_notion",
+      "category": "knowledge",
+      "label": "Notion",
+      "description": "Load pages from Notion.",
+      "refPrefix": "notion",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "page_ids": []
+      },
+      "fields": [
+        {
+          "key": "page_ids",
+          "label": "Page IDs",
+          "kind": "json",
+          "help": "JSON array of page IDs.",
+          "required": false,
+          "templated": false,
+          "rows": 3,
+          "shape": "array"
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "kb_gdrive",
+      "category": "knowledge",
+      "label": "Google Drive",
+      "description": "Load files from Google Drive.",
+      "refPrefix": "drive",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "folder_id": ""
+      },
+      "fields": [
+        {
+          "key": "folder_id",
+          "label": "Folder ID",
+          "kind": "text",
+          "required": true,
+          "templated": false
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "logic_if",
+      "category": "logic",
+      "label": "If / Else",
+      "description": "Branch based on a condition.",
+      "refPrefix": "if",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "true",
+          "kind": "data",
+          "label": "True"
+        },
+        {
+          "id": "false",
+          "kind": "data",
+          "label": "False"
+        }
+      ],
+      "defaultData": {
+        "field": "{{input}}",
+        "operator": "contains",
+        "value": ""
+      },
+      "fields": [
+        {
+          "key": "field",
+          "label": "Value to check",
+          "kind": "text",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "operator",
+          "label": "Operator",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "equals",
+              "label": "equals"
+            },
+            {
+              "value": "not_equals",
+              "label": "does not equal"
+            },
+            {
+              "value": "contains",
+              "label": "contains"
+            },
+            {
+              "value": "not_contains",
+              "label": "does not contain"
+            },
+            {
+              "value": "greater_than",
+              "label": "greater than"
+            },
+            {
+              "value": "less_than",
+              "label": "less than"
+            },
+            {
+              "value": "is_empty",
+              "label": "is empty"
+            },
+            {
+              "value": "is_not_empty",
+              "label": "is not empty"
+            }
+          ]
+        },
+        {
+          "key": "value",
+          "label": "Compare to",
+          "kind": "text",
+          "required": false,
+          "templated": true
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "logic_loop",
+      "category": "logic",
+      "label": "Loop",
+      "description": "Repeat a branch until a condition is met or the iteration limit is hit.",
+      "refPrefix": "loop",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "loop",
+          "kind": "data",
+          "label": "Loop"
+        },
+        {
+          "id": "done",
+          "kind": "data",
+          "label": "Done"
+        }
+      ],
+      "defaultData": {
+        "max_iterations": 5,
+        "until": ""
+      },
+      "fields": [
+        {
+          "key": "max_iterations",
+          "label": "Max iterations",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 1,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "until",
+          "label": "Stop when output contains",
+          "kind": "text",
+          "help": "Leave empty to always run the maximum number of iterations.",
+          "required": false,
+          "templated": true
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "hitl_approval",
+      "category": "logic",
+      "label": "Approval Gate",
+      "description": "Pause the flow until a person approves or rejects.",
+      "refPrefix": "approval",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "approved",
+          "kind": "data",
+          "label": "Approved"
+        },
+        {
+          "id": "rejected",
+          "kind": "data",
+          "label": "Rejected"
+        }
+      ],
+      "defaultData": {
+        "message": "Please review",
+        "allow_edit": true
+      },
+      "fields": [
+        {
+          "key": "message",
+          "label": "Message to reviewer",
+          "kind": "textarea",
+          "required": false,
+          "templated": true,
+          "rows": 3
+        },
+        {
+          "key": "allow_edit",
+          "label": "Reviewer can edit the content",
+          "kind": "switch",
+          "required": false,
+          "templated": false
+        }
+      ],
+      "comingSoon": false
+    },
+    {
+      "type": "action_email",
+      "category": "action",
+      "label": "Send Email",
+      "description": "Send an email (Resend).",
+      "refPrefix": "email",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "to": "",
+        "subject": "",
+        "body": "{{input}}"
+      },
+      "fields": [
+        {
+          "key": "to",
+          "label": "To",
+          "kind": "text",
+          "placeholder": "someone@example.com",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "subject",
+          "label": "Subject",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "body",
+          "label": "Body",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 5
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "action_slack",
+      "category": "action",
+      "label": "Slack Message",
+      "description": "Post a message to a Slack channel.",
+      "refPrefix": "slack",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "channel": "",
+        "text": "{{input}}"
+      },
+      "fields": [
+        {
+          "key": "channel",
+          "label": "Channel",
+          "kind": "text",
+          "placeholder": "#general",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "text",
+          "label": "Message",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 4
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "action_telegram",
+      "category": "action",
+      "label": "Telegram Message",
+      "description": "Send a Telegram message.",
+      "refPrefix": "telegram",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "chat_id": "",
+        "text": "{{input}}"
+      },
+      "fields": [
+        {
+          "key": "chat_id",
+          "label": "Chat ID",
+          "kind": "text",
+          "required": true,
+          "templated": false
+        },
+        {
+          "key": "text",
+          "label": "Message",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 4
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "action_http_response",
+      "category": "action",
+      "label": "HTTP Response",
+      "description": "Reply to the webhook caller.",
+      "refPrefix": "response",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "status_code": 200,
+        "body": "{{input}}"
+      },
+      "fields": [
+        {
+          "key": "status_code",
+          "label": "Status code",
+          "kind": "number",
+          "required": false,
+          "templated": false,
+          "min": 100,
+          "max": 599,
+          "step": 1
+        },
+        {
+          "key": "body",
+          "label": "Body",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 4
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "action_db_write",
+      "category": "action",
+      "label": "Database Write",
+      "description": "Write a document to a Firestore collection.",
+      "refPrefix": "db_write",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "out",
+          "kind": "data"
+        }
+      ],
+      "defaultData": {
+        "collection": "",
+        "document": "{{input}}"
+      },
+      "fields": [
+        {
+          "key": "collection",
+          "label": "Collection",
+          "kind": "text",
+          "required": true,
+          "templated": true
+        },
+        {
+          "key": "document",
+          "label": "Document",
+          "kind": "textarea",
+          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 4
+        }
+      ],
+      "comingSoon": true
+    },
+    {
+      "type": "output_display",
+      "category": "action",
+      "label": "Output",
+      "description": "Show the result in the run panel.",
+      "refPrefix": "result",
+      "inputs": [
+        {
+          "id": "in",
+          "kind": "data"
+        }
+      ],
+      "outputs": [],
+      "defaultData": {},
+      "fields": [],
+      "comingSoon": false
+    }
+  ]
+}

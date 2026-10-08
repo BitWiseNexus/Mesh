@@ -49,6 +49,8 @@ export type NodeData = { label?: string } & Record<string, unknown>;
 export interface FlowNode {
   id: string;
   type: NodeType;
+  /** Readable unique name for template references, e.g. `agent` in `{{agent.output}}`. */
+  ref?: string;
   data: NodeData;
   position: { x: number; y: number };
 }

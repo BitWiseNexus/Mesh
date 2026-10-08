@@ -95,9 +95,9 @@ test("issues menu jumps to the node with the problem", async ({ editor, page }) 
   await editor.issuesButton(/error/).click();
   await page.getByRole("menuitem", { name: /URL is required/ }).click();
   await expect(editor.settings.getByText("API Caller", { exact: true })).toBeVisible();
-  await expect(editor.settings.getByLabel("URL")).toHaveAttribute("aria-invalid", "true");
+  await expect(editor.settings.getByRole("textbox", { name: /^URL/ })).toHaveAttribute("aria-invalid", "true");
 
-  await editor.settings.getByLabel("URL").fill("https://api.example.com/leads");
+  await editor.settings.getByRole("textbox", { name: /^URL/ }).fill("https://api.example.com/leads");
   await expect(editor.issuesButton("1 warning")).toBeVisible();
   await editor.settings.getByRole("button", { name: "Delete" }).click();
   await editor.readyToRun();
