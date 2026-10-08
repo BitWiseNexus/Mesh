@@ -6,8 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import llm
-from app.api import flows, health, me, runs
+from app.api import credentials, flows, health, me, runs
 from app.core.config import get_settings
+from app.core.crypto import get_cipher
 from app.core.errors import register_error_handlers
 from app.core.firebase import init_firebase
 from app.services.runs import RunManager
@@ -16,6 +17,7 @@ from app.services.runs import RunManager
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_firebase()
+    get_cipher()  # refuse to start without an encryption key where one is required
     app.state.runs = RunManager(get_settings())
     # LiteLLM takes seconds to import; do it now, off the event loop, not on the first run.
     asyncio.get_running_loop().run_in_executor(None, llm.warm_up)
@@ -39,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(me.router)
     app.include_router(flows.router)
     app.include_router(runs.router)
+    app.include_router(credentials.router)
     register_error_handlers(app)
     return app
 

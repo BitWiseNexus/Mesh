@@ -28,8 +28,10 @@ from app.core.firebase import get_db
 from app.engine.compiler import compile_flow
 from app.engine.executor import not_runnable_issues
 from app.engine.validation import FlowIssue
+from app.repositories.credentials import CredentialRepository
 from app.repositories.runs import RunRepository
 from app.schemas.runs import RunInfo, RunRequest
+from app.services.credentials import UserSecrets
 from app.services.runs import RunManager
 
 router = APIRouter(tags=["runs"])
@@ -88,7 +90,12 @@ async def start_run(
         input=body.input,
     )
     manager.start(
-        run_id=info.run_id, owner_uid=user.uid, plan=plan, input=body.input, repository=runs
+        run_id=info.run_id,
+        owner_uid=user.uid,
+        plan=plan,
+        input=body.input,
+        repository=runs,
+        secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
     )
     return info
 

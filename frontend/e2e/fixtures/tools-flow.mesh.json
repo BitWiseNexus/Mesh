@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Tools demo",
+  "description": "An agent (mock/tools) calls a writer agent and an API.",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": {
+        "input": "cats"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_lead",
+      "type": "agent_node",
+      "ref": "lead",
+      "data": {
+        "label": "Lead Agent",
+        "model": "mock/tools",
+        "prompt": "{{input}}",
+        "max_tool_steps": 3
+      },
+      "position": {
+        "x": 400,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_writer",
+      "type": "agent_node",
+      "ref": "writer",
+      "data": {
+        "label": "Writer",
+        "model": "mock/echo",
+        "prompt": "Write about {{input}}"
+      },
+      "position": {
+        "x": 250,
+        "y": 300
+      }
+    },
+    {
+      "id": "node_api",
+      "type": "tool_http",
+      "ref": "health_api",
+      "data": {
+        "label": "Health API",
+        "method": "GET",
+        "url": "http://127.0.0.1:8000/health"
+      },
+      "position": {
+        "x": 600,
+        "y": 300
+      }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "result",
+      "data": {},
+      "position": {
+        "x": 800,
+        "y": 0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "node_t",
+      "sourceHandle": "out",
+      "target": "node_lead",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e2",
+      "source": "node_lead",
+      "sourceHandle": "out",
+      "target": "node_o",
+      "targetHandle": "in"
+    },
+    {
+      "id": "t1",
+      "source": "node_lead",
+      "sourceHandle": "tools",
+      "target": "node_writer",
+      "targetHandle": "tool",
+      "type": "tool_connection"
+    },
+    {
+      "id": "t2",
+      "source": "node_lead",
+      "sourceHandle": "tools",
+      "target": "node_api",
+      "targetHandle": "tool",
+      "type": "tool_connection"
+    }
+  ]
+}

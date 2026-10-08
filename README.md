@@ -53,9 +53,22 @@ ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
 ```
 
-No keys yet? Set an agent's model to `mock/echo`: it streams its task back without calling any
-provider (available outside production). Nodes that can't run yet (If / Else, Loop, Approval Gate,
-tools) are reported when you press Run.
+Users can also save their own keys under **API keys** (account menu): they're stored encrypted
+and used automatically for the matching provider. In production, set `CREDENTIALS_ENCRYPTION_KEY`
+(see `backend/.env.example`).
+
+No keys yet? Set an agent's model to `mock/echo` (streams its task back) or `mock/tools` (calls
+every attached tool once, then reports the results) — no provider involved, available outside
+production.
+
+### Tools
+
+Attach nodes to an agent's **Tools** handle and the agent can call them: **Web Search** (Tavily
+with a key, DuckDuckGo without), **Web Scraper** (a page's readable text), **API Caller** (any
+REST endpoint) and **other agents**. In an API Caller or sub-agent, `{{input.<name>}}` declares a
+value the agent fills in. Tools that fetch URLs can't reach private or local addresses in
+production. Nodes that can't run yet (If / Else, Loop, Approval Gate) are reported when you press
+Run.
 
 ## Tests
 

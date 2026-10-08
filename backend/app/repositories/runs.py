@@ -4,7 +4,8 @@ Document `runs/{run_id}`:
     owner_uid, flow_id, flow_version, status, trigger_id, input, error,
     created_at, started_at, finished_at,
     node_states: {node_id: {status, started_at, finished_at, error, handles,
-                            output_json, output_truncated}}
+                            output_json, output_truncated, calls}}
+                 (a tool node's entry is its latest call; `calls` counts them)
 
 Outputs are stored as JSON text (`output_json`): Firestore can't hold arrays inside arrays, and
 indexing arbitrary output would waste writes (`node_states` is exempt from indexing). Each output
@@ -52,6 +53,7 @@ def _node_state(raw: dict[str, Any]) -> NodeRunState:
         output_truncated=raw.get("output_truncated", False),
         error=raw.get("error"),
         handles=raw.get("handles"),
+        calls=raw.get("calls"),
     )
 
 
@@ -149,6 +151,27 @@ class RunRecorder:
                 state["handles"] = event.get("handles", [])
                 state |= self._encode_output(event.get("output"))
             self._set_node(event["node_id"], state)
+        elif kind == "tool_call":
+            # A tool node's state is its latest call (+ how many calls it got).
+            if not event["tool_node_id"]:
+                return  # the model called a tool that doesn't exist
+            previous = self._nodes.get(event["tool_node_id"], {})
+            self._set_node(
+                event["tool_node_id"],
+                {"status": "running", "started_at": at, "calls": previous.get("calls", 0) + 1},
+            )
+        elif kind == "tool_result":
+            if not event["tool_node_id"]:
+                return
+            state = {**self._nodes.get(event["tool_node_id"], {}), "status": event["status"]}
+            state["finished_at"] = at
+            state.pop("output_json", None)
+            state.pop("error", None)
+            if event.get("error"):
+                state["error"] = event["error"]
+            else:
+                state |= self._encode_output(event.get("output"))
+            self._set_node(event["tool_node_id"], state)
         elif kind == "run_finished":
             self._pending |= {
                 "status": event["status"],

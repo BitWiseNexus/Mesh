@@ -1,6 +1,14 @@
 import type { Page } from "@playwright/test";
 
-import { BRANCH_FIXTURE, ECHO_FIXTURE, expect, importFixture, test, type Editor } from "./helpers";
+import {
+  BRANCH_FIXTURE,
+  ECHO_FIXTURE,
+  expect,
+  importFixture,
+  test,
+  TOOLS_FIXTURE,
+  type Editor,
+} from "./helpers";
 
 const runPanel = (page: Page) => page.getByRole("region", { name: "Run" });
 const runStatus = (page: Page) => page.getByRole("status", { name: "Run status" });
@@ -79,6 +87,38 @@ test("Run is disabled while the flow has errors", async ({ editor, page }) => {
   await page.keyboard.press("Control+Enter");
   await expect(page.getByText("Fix the flow's errors before running it.")).toBeVisible();
   await expect(runPanel(page)).toHaveCount(0);
+});
+
+test("an agent calls tools: another agent and an API", async ({ editor, page }) => {
+  await editor.open();
+  await importFixture(editor, TOOLS_FIXTURE, 5);
+  await editor.readyToRun();
+  await runButton(page).click();
+
+  await expect(runStatus(page)).toHaveText("Succeeded", { timeout: 15_000 });
+  // Tools light up on the canvas once called, and their attachments show as used.
+  for (const tool of ["Writer", "Health API"]) {
+    await expect(nodeStatus(editor, tool, "Succeeded")).toBeVisible();
+  }
+  await expect(page.locator('.react-flow__edge [data-run-state="delivered"]')).toHaveCount(4);
+
+  const lead = runPanel(page).getByRole("listitem", { name: "Lead Agent output" });
+  const calls = lead.getByRole("list", { name: "Tool calls" });
+  await expect(calls.getByRole("listitem")).toHaveCount(2);
+  await expect(calls).toContainText("writer");
+  await expect(calls).toContainText("health_api");
+  // The sub-agent streamed its own reply into its own row.
+  await expect(runPanel(page).getByRole("listitem", { name: "Writer output" })).toContainText(
+    "Write about cats",
+  );
+  const result = runPanel(page).getByRole("listitem", { name: "Output output" });
+  await expect(result).toContainText("Tool results: writer: Write about cats");
+  await expect(result).toContainText('"status": "ok"'); // the real /health response
+
+  await runPanel(page).getByRole("tab", { name: "Logs" }).click();
+  const log = runPanel(page).getByRole("list", { name: "Run log" });
+  await expect(log).toContainText("calls writer");
+  await expect(log).toContainText("health_api returned");
 });
 
 test("explains why a flow can't run yet", async ({ editor, page }) => {

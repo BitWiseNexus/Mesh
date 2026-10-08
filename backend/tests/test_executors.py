@@ -14,6 +14,7 @@ from app.engine.executor import (
     not_runnable_issues,
     runnable_types,
 )
+from app.llm import ChatResult
 from app.schemas.node_types import NodeType
 from tests.flows import edge, flow, node, tool_edge
 
@@ -34,7 +35,9 @@ def test_registering_a_type_twice_fails() -> None:
             return NodeResult()
 
 
-def test_not_runnable_nodes_and_tools() -> None:
+def test_not_runnable_nodes_and_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every available tool type has an implementation; pretend Web Search doesn't.
+    monkeypatch.setattr("app.engine.tools.get_tool_kind", lambda node_type: None)
     plan = compile_flow(
         flow(
             [
@@ -53,7 +56,8 @@ def test_not_runnable_nodes_and_tools() -> None:
         ),
         (
             "not-runnable:s",
-            "“Web Search”: agents can't use tools yet — this arrives in a later update",
+            "“Web Search”: Web Search nodes can't be used as tools yet — this arrives in a later "
+            "update",
         ),
     ]
     starter = flow([node("t", "trigger_manual"), node("o", "output_display")], [edge("t", "o")])
@@ -78,12 +82,14 @@ def _run_agent(input: str, **data) -> tuple[NodeResult, list[dict]]:
 def test_agent_streams_the_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: list = []
 
-    async def fake_stream(model, messages, *, temperature=None):
-        sent.append((model, messages, temperature))
+    async def fake_complete(model, messages, *, temperature=None, on_text, **kwargs):
+        sent.append((model, list(messages), temperature))
+        assert kwargs == {"tools": None, "tool_choice": None, "api_key": None}  # no tools, no key
         for chunk in ("Hel", "lo"):
-            yield chunk
+            on_text(chunk)
+        return ChatResult("Hello")
 
-    monkeypatch.setattr("app.nodes.executors.agent.stream_chat", fake_stream)
+    monkeypatch.setattr("app.nodes.executors.agent.complete", fake_complete)
     result, events = _run_agent(
         "the input",
         model="gpt-4o",

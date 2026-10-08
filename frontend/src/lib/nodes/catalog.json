@@ -185,10 +185,12 @@
       ],
       "defaultData": {
         "model": "gpt-4o",
+        "credential_id": null,
         "system_prompt": "",
         "prompt": "{{input}}",
         "temperature": 0.7,
-        "max_tool_steps": 5
+        "max_tool_steps": 5,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -205,6 +207,19 @@
             "claude-haiku-4-5",
             "gemini-2.5-pro",
             "gemini-2.5-flash"
+          ]
+        },
+        {
+          "key": "credential_id",
+          "label": "API key",
+          "kind": "credential",
+          "help": "Automatic uses your saved key for the model's provider, or the server's.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "openai",
+            "anthropic",
+            "gemini"
           ]
         },
         {
@@ -239,12 +254,22 @@
           "key": "max_tool_steps",
           "label": "Max tool steps",
           "kind": "number",
-          "help": "Upper bound on tool calls per run.",
+          "help": "Rounds of tool calls the agent may make before it has to answer.",
           "required": false,
           "templated": false,
           "min": 1,
           "max": 25,
           "step": 1
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": false
@@ -279,10 +304,12 @@
       ],
       "defaultData": {
         "model": "gpt-4o",
+        "credential_id": null,
         "system_prompt": "",
         "prompt": "{{input}}",
         "temperature": 0.3,
-        "max_rounds": 5
+        "max_rounds": 5,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -299,6 +326,19 @@
             "claude-haiku-4-5",
             "gemini-2.5-pro",
             "gemini-2.5-flash"
+          ]
+        },
+        {
+          "key": "credential_id",
+          "label": "API key",
+          "kind": "credential",
+          "help": "Automatic uses your saved key for the model's provider, or the server's.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "openai",
+            "anthropic",
+            "gemini"
           ]
         },
         {
@@ -338,6 +378,16 @@
           "min": 1,
           "max": 20,
           "step": 1
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": true
@@ -358,7 +408,8 @@
       "outputs": [],
       "defaultData": {
         "provider": "tavily",
-        "max_results": 5
+        "max_results": 5,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -387,6 +438,16 @@
           "min": 1,
           "max": 20,
           "step": 1
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": false
@@ -406,7 +467,8 @@
       ],
       "outputs": [],
       "defaultData": {
-        "max_chars": 20000
+        "max_chars": 20000,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -418,6 +480,16 @@
           "min": 500,
           "max": 200000,
           "step": 500
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": false
@@ -438,7 +510,8 @@
       "outputs": [],
       "defaultData": {
         "code": "",
-        "timeout_seconds": 30
+        "timeout_seconds": 30,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -460,6 +533,16 @@
           "min": 1,
           "max": 300,
           "step": 1
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": true
@@ -482,7 +565,10 @@
         "method": "GET",
         "url": "",
         "headers": {},
-        "body": ""
+        "body": "",
+        "credential_id": null,
+        "credential_header": "Authorization",
+        "tool_description": ""
       },
       "fields": [
         {
@@ -538,6 +624,36 @@
           "help": "Use {{input}} for the previous node's output, or insert another node's output.",
           "required": false,
           "templated": true
+        },
+        {
+          "key": "credential_id",
+          "label": "API key",
+          "kind": "credential",
+          "help": "Optional. Sent with every request, never shown to the agent.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "http"
+          ]
+        },
+        {
+          "key": "credential_header",
+          "label": "Send the key in header",
+          "kind": "text",
+          "help": "Authorization sends “Bearer <key>”; any other header gets the key as is.",
+          "placeholder": "Authorization",
+          "required": false,
+          "templated": false
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
       "comingSoon": false

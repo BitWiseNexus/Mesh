@@ -37,9 +37,10 @@ class OptionSpec(_Spec):
     label: str
 
 
-#: `knowledge_base` holds the id of one of the user's knowledge bases (picked from a list).
+#: `knowledge_base` holds the id of one of the user's knowledge bases (picked from a list);
+#: `credential` the id of one of their saved API keys (empty = automatic, see `providers`).
 FieldKind = Literal[
-    "text", "textarea", "code", "number", "select", "switch", "json", "knowledge_base"
+    "text", "textarea", "code", "number", "select", "switch", "json", "knowledge_base", "credential"
 ]
 
 
@@ -65,6 +66,7 @@ class FieldSpec(_Spec):
     step: int | float | None = None  # number
     options: list[OptionSpec] | None = None  # select
     shape: Literal["object", "array"] | None = None  # json
+    providers: list[str] | None = None  # credential: which saved keys fit
 
     @model_validator(mode="after")
     def _kind_specific(self) -> Self:
@@ -72,6 +74,8 @@ class FieldSpec(_Spec):
             raise ValueError(f"select field {self.key!r} needs options")
         if self.kind == "code" and not self.language:
             raise ValueError(f"code field {self.key!r} needs a language")
+        if self.kind == "credential" and not self.providers:
+            raise ValueError(f"credential field {self.key!r} needs providers")
         if self.min is not None and self.max is not None and self.min > self.max:
             raise ValueError(f"field {self.key!r}: min > max")
         if self.templated and self.kind not in ("text", "textarea"):
@@ -163,9 +167,36 @@ def number(key: str, label: str, min: float, max: float, step: float = 1, **kw: 
     return FieldSpec(key=key, label=label, kind="number", min=min, max=max, step=step, **kw)
 
 
+#: Every node that can be attached to an agent's Tools handle has one.
+TOOL_DESCRIPTION = textarea(
+    "tool_description",
+    "Description for the agent",
+    rows=2,
+    placeholder="When should the agent use this, and what does it return?",
+    help="Used when an agent calls this node as a tool. Leave empty for a default description.",
+)
+
+
+def with_tool_description(fields: list[FieldSpec], default_data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "fields": [*fields, TOOL_DESCRIPTION],
+        "default_data": {**default_data, "tool_description": ""},
+    }
+
+
+def credential(key: str, label: str, providers: list[str], **kw: Any) -> FieldSpec:
+    return FieldSpec(key=key, label=label, kind="credential", providers=providers, **kw)
+
+
 def agent_fields(*extra: FieldSpec) -> list[FieldSpec]:
     return [
         text("model", "Model", suggestions=MODEL_SUGGESTIONS, required=True),
+        credential(
+            "credential_id",
+            "API key",
+            ["openai", "anthropic", "gemini"],
+            help="Automatic uses your saved key for the model's provider, or the server's.",
+        ),
         textarea(
             "system_prompt",
             "System prompt",
@@ -193,8 +224,14 @@ def step(category: NodeCategory, **kw: Any) -> NodeSpec:
     return NodeSpec(category=category, inputs=[IN], outputs=[OUT], **kw)
 
 
-def tool(**kw: Any) -> NodeSpec:
-    return NodeSpec(category=NodeCategory.TOOL, inputs=[TOOL], outputs=[], **kw)
+def tool(*, fields: list[FieldSpec], default_data: dict[str, Any], **kw: Any) -> NodeSpec:
+    return NodeSpec(
+        category=NodeCategory.TOOL,
+        inputs=[TOOL],
+        outputs=[],
+        **with_tool_description(fields, default_data),
+        **kw,
+    )
 
 
 def action(**kw: Any) -> NodeSpec:
@@ -273,17 +310,24 @@ _SPECS: list[NodeSpec] = [
         outputs=[OUT, TOOLS],
         label="Agent",
         description="An LLM with a system prompt that can call connected tools.",
-        default_data={
-            "model": "gpt-4o",
-            "system_prompt": "",
-            "prompt": "{{input}}",
-            "temperature": 0.7,
-            "max_tool_steps": 5,
-        },
-        fields=agent_fields(
-            number(
-                "max_tool_steps", "Max tool steps", 1, 25, help="Upper bound on tool calls per run."
-            )
+        **with_tool_description(
+            agent_fields(
+                number(
+                    "max_tool_steps",
+                    "Max tool steps",
+                    1,
+                    25,
+                    help="Rounds of tool calls the agent may make before it has to answer.",
+                )
+            ),
+            {
+                "model": "gpt-4o",
+                "credential_id": None,
+                "system_prompt": "",
+                "prompt": "{{input}}",
+                "temperature": 0.7,
+                "max_tool_steps": 5,
+            },
         ),
     ),
     NodeSpec(
@@ -296,14 +340,17 @@ _SPECS: list[NodeSpec] = [
         outputs=[OUT, TOOLS],
         label="Supervisor Agent",
         description="Delegates sub-tasks to connected worker agents and combines their results.",
-        default_data={
-            "model": "gpt-4o",
-            "system_prompt": "",
-            "prompt": "{{input}}",
-            "temperature": 0.3,
-            "max_rounds": 5,
-        },
-        fields=agent_fields(number("max_rounds", "Max delegation rounds", 1, 20)),
+        **with_tool_description(
+            agent_fields(number("max_rounds", "Max delegation rounds", 1, 20)),
+            {
+                "model": "gpt-4o",
+                "credential_id": None,
+                "system_prompt": "",
+                "prompt": "{{input}}",
+                "temperature": 0.3,
+                "max_rounds": 5,
+            },
+        ),
     ),
     # Tools (attached to agents via tool_connection)
     tool(
@@ -362,7 +409,14 @@ _SPECS: list[NodeSpec] = [
         output_hint="The response: {status, body}",
         label="API Caller",
         description="Call a REST API endpoint.",
-        default_data={"method": "GET", "url": "", "headers": {}, "body": ""},
+        default_data={
+            "method": "GET",
+            "url": "",
+            "headers": {},
+            "body": "",
+            "credential_id": None,
+            "credential_header": "Authorization",
+        },
         fields=[
             FieldSpec(
                 key="method",
@@ -379,6 +433,18 @@ _SPECS: list[NodeSpec] = [
             ),
             FieldSpec(key="headers", label="Headers", kind="json", rows=4, shape="object"),
             textarea("body", "Body", help=TEMPLATE_HELP, templated=True),
+            credential(
+                "credential_id",
+                "API key",
+                ["http"],
+                help="Optional. Sent with every request, never shown to the agent.",
+            ),
+            text(
+                "credential_header",
+                "Send the key in header",
+                placeholder="Authorization",
+                help="Authorization sends “Bearer <key>”; any other header gets the key as is.",
+            ),
         ],
     ),
     # Knowledge / RAG

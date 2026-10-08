@@ -25,6 +25,8 @@ class NodeRunState(BaseModel):
     error: str | None = None
     #: Output handles that delivered.
     handles: list[str] | None = None
+    #: Tools: how often the agent called it (the other fields describe the latest call).
+    calls: int | None = None
 
 
 class RunInfo(BaseModel):

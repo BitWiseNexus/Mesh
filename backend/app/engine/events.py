@@ -7,6 +7,10 @@ status transitions and outputs reach Firestore; tokens and logs are stream-only 
     node_started   {node_id}
     token          {node_id, text}                       streamed LLM output
     log            {node_id?, level, message}
+    tool_call      {node_id, tool_node_id, call_id, name, arguments}
+                   an agent (node_id) calls the node attached as its tool
+    tool_result    {node_id, tool_node_id, call_id, status, output?, error?}
+                   status: succeeded | failed (the error goes back to the agent)
     node_finished  {node_id, status, output?, handles?, error?}
                    status: succeeded | failed | skipped | cancelled
                    handles: the output handles that delivered (others were skipped)
@@ -52,6 +56,39 @@ def token(node_id: str, text: str) -> RunEvent:
 
 def log(message: str, level: LogLevel = "info", node_id: str | None = None) -> RunEvent:
     return event("log", node_id=node_id, level=level, message=message)
+
+
+def tool_call(node_id: str, tool_node_id: str, call_id: str, name: str, arguments: Any) -> RunEvent:
+    return event(
+        "tool_call",
+        node_id=node_id,
+        tool_node_id=tool_node_id,
+        call_id=call_id,
+        name=name,
+        arguments=arguments,
+    )
+
+
+def tool_result(
+    node_id: str,
+    tool_node_id: str,
+    call_id: str,
+    *,
+    output: Any = None,
+    error: str | None = None,
+) -> RunEvent:
+    status = "failed" if error is not None else "succeeded"
+    result = event(
+        "tool_result",
+        node_id=node_id,
+        tool_node_id=tool_node_id,
+        call_id=call_id,
+        status=status,
+        error=error,
+    )
+    if error is None:
+        result["output"] = output
+    return result
 
 
 def node_finished(

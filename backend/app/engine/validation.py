@@ -92,6 +92,8 @@ def field_value_problem(field: FieldSpec, value: Any) -> str | None:
             return None if isinstance(value, bool) else "must be on or off"
         case "knowledge_base":
             return None if isinstance(value, str) else "must be a knowledge base"
+        case "credential":
+            return None if isinstance(value, str) else "must be one of your saved keys"
         case _:
             return None if isinstance(value, str) else "must be text"
 

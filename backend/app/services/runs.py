@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from app.core.config import Settings
 from app.engine import events
 from app.engine.compiler import ExecutionPlan
+from app.engine.context import Secrets
 from app.engine.events import RunEvent
 from app.engine.runner import Runner
 from app.repositories.runs import RunRecorder, RunRepository
@@ -103,6 +104,7 @@ class RunManager:
         plan: ExecutionPlan,
         input: str | None,
         repository: RunRepository,
+        secrets: Secrets | None = None,
     ) -> LiveRun:
         live = LiveRun(run_id=run_id, owner_uid=owner_uid, log=RunEventLog())
         recorder = RunRecorder(repository, run_id)
@@ -112,7 +114,12 @@ class RunManager:
             recorder.record(event)
 
         runner = Runner(
-            plan, run_id=run_id, input=input, sink=sink, timeout=self.settings.run_timeout_seconds
+            plan,
+            run_id=run_id,
+            input=input,
+            sink=sink,
+            timeout=self.settings.run_timeout_seconds,
+            secrets=secrets,
         )
 
         live.runner_task = asyncio.create_task(runner.run(), name=f"run:{run_id}")

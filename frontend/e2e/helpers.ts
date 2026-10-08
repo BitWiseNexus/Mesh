@@ -9,6 +9,8 @@ export const PASSWORD = "correct-horse-1";
 export const FIXTURE = path.join(__dirname, "fixtures", "support-flow.mesh.json");
 /** Manual Trigger → Agent (mock/echo, no API key needed) → Output. */
 export const ECHO_FIXTURE = path.join(__dirname, "fixtures", "echo-flow.mesh.json");
+/** Manual Trigger → Lead Agent (mock/tools) → Output; tools: Writer agent, Health API (/health). */
+export const TOOLS_FIXTURE = path.join(__dirname, "fixtures", "tools-flow.mesh.json");
 /** Manual Trigger → If / Else (no executor yet) → Output. */
 export const BRANCH_FIXTURE = path.join(__dirname, "fixtures", "branch-flow.mesh.json");
 

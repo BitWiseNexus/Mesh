@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FieldDef } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
 
+import { CredentialField } from "./credential-field";
 import { ReferencePicker } from "./reference-picker";
 
 interface FieldProps<F extends FieldDef = FieldDef> {
@@ -186,6 +187,17 @@ export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldPr
             <SelectValue placeholder="Knowledge bases are coming soon" />
           </SelectTrigger>
         </Select>
+      );
+      break;
+    case "credential":
+      control = (
+        <CredentialField
+          id={id}
+          providers={field.providers}
+          value={value}
+          onChange={onChange}
+          invalid={invalid}
+        />
       );
       break;
     case "number":

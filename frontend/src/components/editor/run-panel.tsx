@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, Minus, Square, X } from "lucide-react";
+import { Check, Loader2, Minus, Square, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,13 @@ import { NODE_REGISTRY, nodeDisplayName } from "@/lib/nodes/registry";
 import type { NodeRunStatus } from "@/lib/runs-api";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
-import { isRunActive, useRunStore, type NodeRun, type RunPhase } from "@/stores/run-store";
+import {
+  isRunActive,
+  useRunStore,
+  type NodeRun,
+  type RunPhase,
+  type ToolCallRun,
+} from "@/stores/run-store";
 import type { NodeType } from "@/types/flow";
 
 /** A node output as text: strings as they are, anything else as indented JSON. */
@@ -99,6 +105,46 @@ function StickToBottom({
   );
 }
 
+/** One line per argument value, shortened: `query: "cats"`. */
+function formatArguments(args: unknown): string {
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    const parts = Object.entries(args).map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
+    return parts.join(", ");
+  }
+  return typeof args === "string" ? args : JSON.stringify(args);
+}
+
+const shorten = (text: string, max = 300) => (text.length > max ? `${text.slice(0, max)}…` : text);
+
+function ToolCalls({ calls }: { calls: ToolCallRun[] }) {
+  return (
+    <ul aria-label="Tool calls" className="mt-1.5 flex flex-col gap-1">
+      {calls.map((call) => (
+        <li key={call.callId} className="rounded-md bg-muted/60 px-2 py-1 text-xs">
+          <div className="flex items-center gap-1.5">
+            <Wrench className="size-3 shrink-0 text-muted-foreground" />
+            <span className="font-medium">{call.name}</span>
+            <span className="min-w-0 truncate text-muted-foreground">
+              ({shorten(formatArguments(call.arguments), 120)})
+            </span>
+            <span className="ml-auto">
+              <StatusIcon status={call.status} />
+            </span>
+          </div>
+          {call.status === "failed" && call.error && (
+            <p className="mt-0.5 text-destructive">{call.error}</p>
+          )}
+          {call.status === "succeeded" && (
+            <p className="mt-0.5 break-words whitespace-pre-wrap text-muted-foreground">
+              {shorten(formatOutput(call.output))}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function NodeOutput({ id, run, name, type }: { id: string; run: NodeRun; name: string; type?: NodeType }) {
   const isResult = type === "output_display";
   const body =
@@ -121,9 +167,11 @@ function NodeOutput({ id, run, name, type }: { id: string; run: NodeRun; name: s
         )}
         <span className="text-muted-foreground">{type ? NODE_REGISTRY[type].label : ""}</span>
         <span className="ml-auto tabular-nums text-muted-foreground">
+          {run.calls ? `called ${run.calls}× · ` : ""}
           {run.status === "skipped" ? "skipped" : seconds(run.startedAt, run.finishedAt)}
         </span>
       </div>
+      {run.toolCalls && run.toolCalls.length > 0 && <ToolCalls calls={run.toolCalls} />}
       {run.error && <p className="mt-1.5 text-sm text-destructive">{run.error}</p>}
       {body && (
         <pre className="mt-1.5 max-h-64 overflow-auto font-sans text-sm whitespace-pre-wrap break-words">

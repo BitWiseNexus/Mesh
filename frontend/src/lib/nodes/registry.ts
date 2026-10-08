@@ -68,6 +68,8 @@ export type FieldDef = {
   | { kind: "json"; rows?: number; shape?: "object" | "array" }
   /** The id of one of the user's knowledge bases. */
   | { kind: "knowledge_base" }
+  /** The id of one of the user's saved API keys for one of `providers`; empty = automatic. */
+  | { kind: "credential"; providers: string[] }
 );
 
 export interface NodeDefinition {

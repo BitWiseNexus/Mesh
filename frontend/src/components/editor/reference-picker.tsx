@@ -28,9 +28,37 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
     edges.filter((e) => (e.type ?? "data") === "data" && e.target === nodeId).map((e) => e.source),
   ).size;
   const hasInputs = senders > 0;
+  // A node attached to an agent's Tools handle gets its input from the agent's tool call.
+  const isTool = edges.some((e) => e.type === "tool_connection" && e.target === nodeId);
 
   return (
     <>
+      {isTool && (
+        <>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Filled in by the agent</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onInsert(formatInput(["value"]))} className="items-start">
+              <CornerDownRight className="mt-0.5" />
+              <span className="min-w-0 flex-1">
+                A named value
+                <span className="block text-xs text-muted-foreground">
+                  Rename “value”: each name becomes a parameter the agent fills in
+                </span>
+              </span>
+              <code className="text-xs text-muted-foreground">{formatInput(["value"])}</code>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onInsert(formatInput())} className="items-start">
+              <CornerDownRight className="mt-0.5" />
+              <span className="min-w-0 flex-1">
+                Everything the agent passes
+                <span className="block text-xs text-muted-foreground">One text parameter, “input”</span>
+              </span>
+              <code className="text-xs text-muted-foreground">{formatInput()}</code>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          {upstream.length > 0 && <DropdownMenuSeparator />}
+        </>
+      )}
       {hasInputs && (
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => onInsert(formatInput())}>
@@ -48,7 +76,7 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
         </DropdownMenuGroup>
       )}
       {hasInputs && upstream.length > 0 && <DropdownMenuSeparator />}
-      <DropdownMenuGroup>
+      {(!isTool || upstream.length > 0) && <DropdownMenuGroup>
         <DropdownMenuLabel>Output of an earlier node</DropdownMenuLabel>
         {upstream.length === 0 ? (
           <DropdownMenuItem disabled>Connect this node after another one first</DropdownMenuItem>
@@ -70,7 +98,7 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
             );
           })
         )}
-      </DropdownMenuGroup>
+      </DropdownMenuGroup>}
     </>
   );
 }

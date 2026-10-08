@@ -18,8 +18,8 @@ read as the raw value instead (`NodeContext.value`).
 """
 
 import json
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol
 
 from app.engine import events
 from app.engine.compiler import ExecutionPlan, PlanEdge, PlannedNode
@@ -64,15 +64,38 @@ def to_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
 
+class Secrets(Protocol):
+    """The run owner's saved API keys (app/services/credentials.py)."""
+
+    async def get(self, provider: str, credential_id: str | None = None) -> str | None:
+        """A specific credential (`credential_id`, which must be for `provider`), or else the
+        owner's key for `provider`, or None."""
+        ...
+
+
+class NoSecrets:
+    async def get(self, provider: str, credential_id: str | None = None) -> str | None:
+        return None
+
+
 class RunContext:
     """Everything a run knows: the plan, the run's input and the outputs produced so far."""
 
-    def __init__(self, plan: ExecutionPlan, *, run_id: str, input: str | None, sink: EventSink):
+    def __init__(
+        self,
+        plan: ExecutionPlan,
+        *,
+        run_id: str,
+        input: str | None,
+        sink: EventSink,
+        secrets: Secrets | None = None,
+    ):
         self.plan = plan
         self.run_id = run_id
         #: The text the run was started with (None → the trigger's default input).
         self.input = input
         self.sink = sink
+        self.secrets: Secrets = secrets or NoSecrets()
         self.outputs: dict[str, Any] = {}
         #: Data edges that delivered into each node.
         self.delivered: dict[str, list[PlanEdge]] = {}
@@ -85,20 +108,28 @@ class RunContext:
             return self.outputs.get(senders[0])
         return {self.plan.node(s).ref: self.outputs.get(s) for s in senders}
 
-    def node(self, node_id: str) -> "NodeContext":
-        return NodeContext(self, self.plan.node(node_id))
+    def node(self, node_id: str, *, input: Any = MISSING) -> "NodeContext":
+        """The context for running `node_id`. `input` overrides what `{{input}}` is (a tool's
+        input is the arguments its agent called it with)."""
+        return NodeContext(self, self.plan.node(node_id), input=input)
 
 
 class NodeContext:
     """What an executor sees: its node, resolved input and config, and event helpers."""
 
-    def __init__(self, run: RunContext, node: PlannedNode) -> None:
+    def __init__(self, run: RunContext, node: PlannedNode, *, input: Any = MISSING) -> None:
         self.run = run
         self.node = node
+        self._input = input
 
     @property
     def input(self) -> Any:
+        if self._input is not MISSING:
+            return self._input
         return self.run.input_of(self.node.id)
+
+    def emit(self, event: dict[str, Any]) -> None:
+        self.run.sink(event)
 
     @property
     def data(self) -> dict[str, Any]:
@@ -122,8 +153,9 @@ class NodeContext:
             self.log(f"{label} has no value", "warning")
         return value
 
-    def render(self, template: str) -> str:
-        """`template` with every reference replaced by its value as text."""
+    def render(self, template: str, escape: Callable[[str, str], str] | None = None) -> str:
+        """`template` with every reference replaced by its value as text. `escape(value, before)`
+        can adapt each value to where it lands (`before`: everything rendered so far)."""
         out: list[str] = []
         for part in parse_template(template):
             if isinstance(part, TextPart):
@@ -131,7 +163,8 @@ class NodeContext:
             elif isinstance(part, InvalidPart):
                 out.append(part.raw)  # validation rejects these; never guess
             else:
-                out.append(to_text(self._resolve(part)))
+                text = to_text(self._resolve(part))
+                out.append(escape(text, "".join(out)) if escape else text)
         return "".join(out)
 
     def value(self, template: str) -> Any:

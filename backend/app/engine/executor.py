@@ -12,7 +12,7 @@ else delivers on all of its outputs. Raise `NodeError` for failures users should
 exception fails the node with a generic message (and is logged with its traceback).
 
 Implementations live in `app/nodes/executors/` (one module per node type) and register on import.
-Executors for nodes used as agent *tools* arrive with tool calling (Phase 4).
+Nodes attached to agents as tools run through `@tool` executors instead (app/engine/tools.py).
 """
 
 import importlib
@@ -58,7 +58,8 @@ def executor(node_type: NodeType) -> Callable[[Executor], Executor]:
     return register
 
 
-def _load() -> None:
+def load_executors() -> None:
+    """Imports app/nodes/executors once, which registers every executor and tool."""
     global _loaded
     if not _loaded:
         _loaded = True
@@ -66,31 +67,35 @@ def _load() -> None:
 
 
 def get_executor(node_type: NodeType) -> Executor | None:
-    _load()
+    load_executors()
     return _EXECUTORS.get(node_type)
 
 
 def runnable_types() -> frozenset[NodeType]:
-    _load()
+    load_executors()
     return frozenset(_EXECUTORS)
 
 
 def not_runnable_issues(plan: ExecutionPlan) -> list[FlowIssue]:
-    """Nodes of `plan` this server can't execute yet: step types without an executor, and nodes
-    attached to agents as tools (tool calling is Phase 4). Empty when the run can start."""
+    """Nodes of `plan` this server can't execute yet: step types without an executor, and tool
+    nodes whose type has no tool implementation. Empty when the run can start."""
     issues: list[FlowIssue] = []
     for node in plan.nodes.values():
         spec = get_spec(node.type)
         name = f"“{node.name}”"
         if node.role == "tool":
-            issues.append(
-                FlowIssue(
-                    id=f"not-runnable:{node.id}",
-                    severity="error",
-                    node_id=node.id,
-                    message=f"{name}: agents can't use tools yet — this arrives in a later update",
+            from app.engine.tools import get_tool_kind  # tools builds on this module
+
+            if get_tool_kind(node.type) is None:
+                issues.append(
+                    FlowIssue(
+                        id=f"not-runnable:{node.id}",
+                        severity="error",
+                        node_id=node.id,
+                        message=f"{name}: {spec.label} nodes can't be used as tools yet — "
+                        "this arrives in a later update",
+                    )
                 )
-            )
         elif get_executor(node.type) is None:
             issues.append(
                 FlowIssue(

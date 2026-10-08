@@ -8,6 +8,7 @@ import {
   fromRunInfo,
   IDLE_RUN,
   isRunActive,
+  toolEdgeRunState,
   useRunStore,
   type RunState,
 } from "./run-store";
@@ -98,6 +99,44 @@ describe("applyRunEvent", () => {
     expect(state.nodes.a.text).toBe("reply");
     expect(state.nodes.zzz).toBeUndefined();
     expect(state.phase).toBe("succeeded");
+  });
+});
+
+describe("tool calls", () => {
+  const call = (id: string, tool: string) =>
+    e({ type: "tool_call", node_id: "a", tool_node_id: tool, call_id: id, name: `fn_${tool}`, arguments: { q: "x" } });
+
+  it("track calls on the agent and the tool node's latest status", () => {
+    const running = replay(e({ type: "node_started", node_id: "a" }), call("c1", "s"));
+    expect(running.nodes.s).toMatchObject({ status: "running", calls: 1 });
+    expect(running.nodes.a.toolCalls).toEqual([
+      { callId: "c1", toolNodeId: "s", name: "fn_s", arguments: { q: "x" }, status: "running" },
+    ]);
+    expect(running.order).toEqual(["a", "s"]);
+    expect(toolEdgeRunState(running.nodes, { target: "s" })).toBe("active");
+
+    const done = [
+      e({ type: "tool_result", node_id: "a", tool_node_id: "s", call_id: "c1", status: "failed", error: "down" }),
+      call("c2", "s"),
+      e({ type: "tool_result", node_id: "a", tool_node_id: "s", call_id: "c2", status: "succeeded", output: [1] }),
+    ].reduce(applyRunEvent, running);
+    expect(done.nodes.s).toMatchObject({ status: "succeeded", calls: 2, output: [1], error: undefined });
+    expect(done.nodes.a.toolCalls?.map((c) => [c.status, c.error ?? c.output])).toEqual([
+      ["failed", "down"],
+      ["succeeded", [1]],
+    ]);
+    expect(done.log.map((l) => [l.level, l.message]).slice(-3)).toEqual([
+      ["warning", "fn_s failed: down"],
+      ["info", "calls fn_s"],
+      ["info", "fn_s returned"],
+    ]);
+    expect(toolEdgeRunState(done.nodes, { target: "s" })).toBe("delivered");
+    expect(toolEdgeRunState(done.nodes, { target: "never_called" })).toBeNull();
+  });
+
+  it("a call to a tool that doesn't exist only shows on the agent", () => {
+    const state = replay(call("c1", ""));
+    expect(Object.keys(state.nodes)).toEqual(["a"]);
   });
 });
 

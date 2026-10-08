@@ -37,7 +37,26 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
+    # Web search (the Web Search tool falls back to DuckDuckGo without one).
+    tavily_api_key: SecretStr | None = None
     llm_timeout_seconds: int = Field(default=120, ge=1)
+    #: One tool call of an agent (an agent used as a tool counts as one call).
+    tool_timeout_seconds: int = Field(default=120, ge=1)
+
+    # Encryption of users' saved API keys: Fernet keys, comma-separated — the first encrypts, all
+    # decrypt (rotation: put the new key first, re-save, then drop the old one). Required in
+    # production; development falls back to a fixed, public dev key.
+    credentials_encryption_key: SecretStr | None = None
+
+    # Outbound requests of tools (API Caller, Web Scraper) to private / local addresses. None →
+    # allowed except in production (lets you call APIs on your machine while developing).
+    outbound_allow_private_networks: bool | None = None
+
+    @property
+    def allow_private_networks(self) -> bool:
+        if self.outbound_allow_private_networks is not None:
+            return self.outbound_allow_private_networks
+        return self.environment != "production"
 
     @property
     def mock_models_enabled(self) -> bool:

@@ -16,6 +16,8 @@ export interface NodeRunState {
   output_truncated: boolean;
   error: string | null;
   handles: string[] | null;
+  /** Tools: how often the agent called it (the other fields describe the latest call). */
+  calls?: number | null;
 }
 
 export interface RunInfo {
@@ -46,6 +48,25 @@ export type RunEvent =
       node_id?: string;
       level: "info" | "warning" | "error";
       message: string;
+    })
+  | (Stamped & {
+      type: "tool_call";
+      /** The calling agent. */
+      node_id: string;
+      /** The node attached as the tool ("" if the model named a tool that doesn't exist). */
+      tool_node_id: string;
+      call_id: string;
+      name: string;
+      arguments: unknown;
+    })
+  | (Stamped & {
+      type: "tool_result";
+      node_id: string;
+      tool_node_id: string;
+      call_id: string;
+      status: "succeeded" | "failed";
+      output?: unknown;
+      error?: string;
     })
   | (Stamped & {
       type: "node_finished";

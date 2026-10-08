@@ -62,6 +62,8 @@ export function fieldValueProblem(field: FieldDef, value: unknown): string | nul
       return typeof value === "boolean" ? null : "must be on or off";
     case "knowledge_base":
       return typeof value === "string" ? null : "must be a knowledge base";
+    case "credential":
+      return typeof value === "string" ? null : "must be one of your saved keys";
     default:
       return typeof value === "string" ? null : "must be text";
   }

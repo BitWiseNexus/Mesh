@@ -1,4 +1,4 @@
-"""The LLM layer (app/llm): model names, mock models, provider errors."""
+"""The LLM layer (app/llm): model names, streaming, tool calls, mock models, provider errors."""
 
 import asyncio
 from types import SimpleNamespace
@@ -7,16 +7,30 @@ import pytest
 
 import app.llm as llm
 from app.core.config import Settings
-from app.llm import LlmError, qualify_model, stream_chat
+from app.llm import ChatResult, LlmError, ToolCall, complete, provider_of, qualify_model
 
 REAL_LITELLM = llm._load_litellm()
 
 
-def collect(model: str, text: str = "one two three") -> list[str]:
-    async def main() -> list[str]:
-        return [c async for c in stream_chat(model, [{"role": "user", "content": text}])]
+def collect(model: str, text: str = "one two three", **kwargs) -> list[str]:
+    """The streamed text chunks of one reply."""
+    chunks: list[str] = []
+    result = asyncio.run(
+        complete(model, [{"role": "user", "content": text}], on_text=chunks.append, **kwargs)
+    )
+    assert result.text == "".join(chunks)
+    return chunks
 
-    return asyncio.run(main())
+
+def chunk(content=None, tool_calls=None):
+    delta = SimpleNamespace(content=content, tool_calls=tool_calls)
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+
+def call_part(index, id=None, name=None, arguments=None):
+    return SimpleNamespace(
+        index=index, id=id, function=SimpleNamespace(name=name, arguments=arguments)
+    )
 
 
 @pytest.mark.parametrize(
@@ -35,6 +49,16 @@ def test_qualify_model(model: str, qualified: str) -> None:
     assert qualify_model(model) == qualified
 
 
+def test_provider_of() -> None:
+    assert [provider_of(m) for m in ("gpt-4o", "claude-x", "gemini/x", "mistral", "mock/echo")] == [
+        "openai",
+        "anthropic",
+        "gemini",
+        None,
+        None,
+    ]
+
+
 def test_mock_echo_streams_the_last_user_message_word_by_word() -> None:
     assert collect("mock/echo") == ["one ", "two ", "three"]
 
@@ -50,7 +74,7 @@ def test_missing_provider_key_is_explained(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(llm, "_load_litellm", lambda: SimpleNamespace())
     for env in ("OPENAI_API_KEY",):
         monkeypatch.delenv(env, raising=False)
-    with pytest.raises(LlmError, match="No API key for OpenAI. Set OPENAI_API_KEY"):
+    with pytest.raises(LlmError, match="No API key for OpenAI. Add one under API keys"):
         collect("gpt-4o")
 
 
@@ -66,9 +90,7 @@ def test_streams_provider_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
 
         async def chunks():
             for text in ("Hi", None, " there"):
-                yield SimpleNamespace(
-                    choices=[SimpleNamespace(delta=SimpleNamespace(content=text))]
-                )
+                yield chunk(text)
             yield SimpleNamespace(choices=[])
 
         return chunks()
@@ -101,3 +123,79 @@ def test_provider_errors_become_readable(monkeypatch: pytest.MonkeyPatch) -> Non
         model = "gpt-9" if "gpt-9" in message else "gpt-4o"
         with pytest.raises(LlmError, match=message):
             collect(model)
+
+
+def test_assembles_streamed_tool_calls_and_passes_the_callers_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    async def acompletion(**kwargs):
+        calls.append(kwargs)
+
+        async def chunks():
+            yield chunk("Let me look.")
+            yield chunk(tool_calls=[call_part(0, "c1", "web_search", '{"que')])
+            yield chunk(
+                tool_calls=[call_part(0, None, None, 'ry": "x"}'), call_part(1, "c2", "api")]
+            )
+            yield chunk(tool_calls=[call_part(1, None, None, "{}")])
+
+        return chunks()
+
+    monkeypatch.setattr(llm, "_load_litellm", lambda: _fake_litellm(acompletion))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # the caller's key is enough
+    tools = [{"type": "function", "function": {"name": "web_search", "parameters": {}}}]
+    result = asyncio.run(
+        complete(
+            "gpt-4o",
+            [{"role": "user", "content": "hi"}],
+            tools=tools,
+            tool_choice="auto",
+            api_key="sk-user",
+        )
+    )
+    assert result == ChatResult(
+        "Let me look.",
+        [ToolCall("c1", "web_search", '{"query": "x"}'), ToolCall("c2", "api", "{}")],
+    )
+    assert calls[0]["tools"] == tools and calls[0]["tool_choice"] == "auto"
+    assert calls[0]["api_key"] == "sk-user"
+    assert result.assistant_message() == {
+        "role": "assistant",
+        "content": "Let me look.",
+        "tool_calls": [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "web_search", "arguments": '{"query": "x"}'},
+            },
+            {"id": "c2", "type": "function", "function": {"name": "api", "arguments": "{}"}},
+        ],
+    }
+
+
+def test_mock_tools_calls_each_tool_then_reports_the_results() -> None:
+    tools = [
+        {
+            "type": "function",
+            "function": {"name": "search", "parameters": {"properties": {"query": {}}}},
+        },
+        {"type": "function", "function": {"name": "ping", "parameters": {"properties": {}}}},
+    ]
+    messages = [{"role": "user", "content": "cats"}]
+    first = asyncio.run(complete("mock/tools", messages, tools=tools))
+    assert first.text == ""
+    assert first.tool_calls == [
+        ToolCall("mock_call_0", "search", '{"query": "cats"}'),
+        ToolCall("mock_call_1", "ping", "{}"),
+    ]
+    messages += [
+        first.assistant_message(),
+        {"role": "tool", "tool_call_id": "mock_call_0", "content": "3 results"},
+        {"role": "tool", "tool_call_id": "mock_call_1", "content": "pong"},
+    ]
+    second = asyncio.run(complete("mock/tools", messages, tools=tools))
+    assert second == ChatResult("Tool results: search: 3 results | ping: pong")
+    # Without tools it behaves like mock/echo.
+    assert asyncio.run(complete("mock/tools", [{"role": "user", "content": "hi"}])).text == "hi"

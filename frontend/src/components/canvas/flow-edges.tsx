@@ -12,7 +12,12 @@ import { X } from "lucide-react";
 import type { CanvasEdge } from "@/lib/flow/graph";
 import { CATEGORIES } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
-import { edgeRunState, useRunStore, type EdgeRunState } from "@/stores/run-store";
+import {
+  edgeRunState,
+  toolEdgeRunState,
+  useRunStore,
+  type EdgeRunState,
+} from "@/stores/run-store";
 
 const RUN_STROKE: Record<Exclude<EdgeRunState, null>, string> = {
   active: "var(--run-active)",
@@ -66,16 +71,21 @@ export function DataEdge(props: EdgeProps<CanvasEdge>) {
 /** Tool attachment: the agent can call the target as a tool. Not an execution step. */
 export function ToolEdge(props: EdgeProps<CanvasEdge>) {
   const [path, labelX, labelY] = getBezierPath(props);
+  const { target } = props;
+  const run = useRunStore((s) => toolEdgeRunState(s.nodes, { target }));
   return (
     <>
       <BaseEdge
         id={props.id}
         path={path}
         interactionWidth={20}
+        className={cn(run === "active" && "mesh-edge-active")}
+        data-run-state={run ?? undefined}
         style={{
-          stroke: CATEGORIES.tool.color,
-          strokeWidth: props.selected ? 2.5 : 1.5,
-          strokeDasharray: "6 4",
+          stroke: run === "active" ? "var(--run-active)" : CATEGORIES.tool.color,
+          strokeWidth: props.selected || run ? 2.5 : 1.5,
+          // .mesh-edge-active sets its own dashes (and animates them).
+          strokeDasharray: run === "active" ? undefined : "6 4",
         }}
       />
       {props.selected && <DeleteEdgeButton id={props.id} x={labelX} y={labelY} />}

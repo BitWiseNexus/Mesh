@@ -199,6 +199,19 @@
       }
     },
     {
+      "name": "credential fields: empty is automatic, a saved key's id is fine, anything else isn't",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "auto", "type": "agent_node", "data": { "credential_id": null } },
+        { "id": "chosen", "type": "agent_node", "data": { "credential_id": "cred_123" } },
+        { "id": "bad", "type": "agent_node", "data": { "credential_id": 42 } }
+      ],
+      "edges": [{ "from": "t", "to": "auto" }, { "from": "t", "to": "chosen" }, { "from": "t", "to": "bad" }],
+      "errors": ["invalid:bad:credential_id"],
+      "warnings": [],
+      "messages": { "invalid:bad:credential_id": "“Agent”: API key must be one of your saved keys" }
+    },
+    {
       "name": "valid references (by ref, by id for older flows, with paths)",
       "nodes": [
         { "id": "t", "type": "trigger_manual", "ref": "trigger" },

@@ -18,7 +18,7 @@ from typing import Any
 
 from app.engine import events
 from app.engine.compiler import ExecutionPlan, PlanEdge
-from app.engine.context import RunContext
+from app.engine.context import RunContext, Secrets
 from app.engine.events import EventSink, NodeStatus, RunStatus
 from app.engine.executor import Executor, NodeError, NodeResult, get_executor
 
@@ -50,9 +50,10 @@ class Runner:
         sink: EventSink,
         timeout: float | None = None,
         executors: dict[Any, Executor] | None = None,
+        secrets: Secrets | None = None,
     ) -> None:
         self.plan = plan
-        self.ctx = RunContext(plan, run_id=run_id, input=input, sink=sink)
+        self.ctx = RunContext(plan, run_id=run_id, input=input, sink=sink, secrets=secrets)
         self.sink = sink
         self.timeout = timeout
         #: Overrides for tests; otherwise the registry.

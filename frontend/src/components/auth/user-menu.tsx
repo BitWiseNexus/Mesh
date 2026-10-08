@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ import { useAuth } from "./auth-provider";
 
 export function UserMenu() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
   if (!user) return null;
 
   const label = user.displayName || user.email || "Account";
@@ -45,6 +47,10 @@ export function UserMenu() {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/settings/api-keys")}>
+          <KeyRound />
+          API keys
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void onSignOut()}>
           <LogOut />
           Sign out

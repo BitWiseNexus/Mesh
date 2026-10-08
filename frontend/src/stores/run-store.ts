@@ -7,6 +7,16 @@ import { create } from "zustand";
 
 import type { NodeRunStatus, RunEvent, RunInfo, RunStatus } from "@/lib/runs-api";
 
+export interface ToolCallRun {
+  callId: string;
+  toolNodeId: string;
+  name: string;
+  arguments: unknown;
+  status: "running" | "succeeded" | "failed";
+  output?: unknown;
+  error?: string;
+}
+
 export interface NodeRun {
   status: NodeRunStatus;
   /** Text streamed so far (agents). */
@@ -18,6 +28,10 @@ export interface NodeRun {
   handles?: string[];
   startedAt?: string;
   finishedAt?: string;
+  /** Agents: the tool calls they made, in order. */
+  toolCalls?: ToolCallRun[];
+  /** Tools: how often they were called. */
+  calls?: number;
 }
 
 export interface RunLogEntry {
@@ -107,6 +121,72 @@ export function applyRunEvent(state: RunState, event: RunEvent): RunState {
           { at: event.at, level: event.level, nodeId: event.node_id, message: event.message },
         ],
       };
+    case "tool_call": {
+      const agent = node(event.node_id);
+      const call: ToolCallRun = {
+        callId: event.call_id,
+        toolNodeId: event.tool_node_id,
+        name: event.name,
+        arguments: event.arguments,
+        status: "running",
+      };
+      const withCall: RunState = {
+        ...state,
+        nodes: {
+          ...state.nodes,
+          [event.node_id]: { ...agent, toolCalls: [...(agent.toolCalls ?? []), call] },
+        },
+        log: [
+          ...state.log,
+          { at: event.at, level: "info", nodeId: event.node_id, message: `calls ${event.name}` },
+        ],
+      };
+      if (!event.tool_node_id) return withCall;
+      const tool = node(event.tool_node_id);
+      return applyNodePatch(withCall, event.tool_node_id, {
+        status: "running",
+        startedAt: event.at,
+        finishedAt: undefined,
+        text: "",
+        error: undefined,
+        calls: (tool.calls ?? 0) + 1,
+      });
+    }
+    case "tool_result": {
+      const agent = node(event.node_id);
+      const patch = event.status === "succeeded" ? { output: event.output } : { error: event.error };
+      const withResult: RunState = {
+        ...state,
+        nodes: {
+          ...state.nodes,
+          [event.node_id]: {
+            ...agent,
+            toolCalls: (agent.toolCalls ?? []).map((c) =>
+              c.callId === event.call_id ? { ...c, status: event.status, ...patch } : c,
+            ),
+          },
+        },
+        log: [
+          ...state.log,
+          {
+            at: event.at,
+            level: event.status === "failed" ? "warning" : "info",
+            nodeId: event.node_id,
+            message:
+              event.status === "failed"
+                ? `${toolName(agent, event.call_id)} failed: ${event.error}`
+                : `${toolName(agent, event.call_id)} returned`,
+          },
+        ],
+      };
+      if (!event.tool_node_id) return withResult;
+      return applyNodePatch(withResult, event.tool_node_id, {
+        status: event.status,
+        finishedAt: event.at,
+        output: event.status === "succeeded" ? event.output : undefined,
+        error: event.error,
+      });
+    }
     case "node_finished":
       return withNode(
         event.node_id,
@@ -150,6 +230,19 @@ export function applyRunEvent(state: RunState, event: RunEvent): RunState {
   }
 }
 
+const toolName = (agent: NodeRun, callId: string) =>
+  agent.toolCalls?.find((c) => c.callId === callId)?.name ?? "tool";
+
+/** `patch` applied to node `id` (added to the panel's order if new). */
+function applyNodePatch(state: RunState, id: string, patch: Partial<NodeRun>): RunState {
+  const current = state.nodes[id] ?? { status: "pending" as const, text: "" };
+  return {
+    ...state,
+    nodes: { ...state.nodes, [id]: { ...current, ...patch } },
+    order: state.order.includes(id) ? state.order : [...state.order, id],
+  };
+}
+
 /** The state of a run from its stored record (when the live stream is no longer available). */
 export function fromRunInfo(state: RunState, run: RunInfo): RunState {
   const ids = Object.keys(run.node_states).sort((a, b) =>
@@ -168,6 +261,7 @@ export function fromRunInfo(state: RunState, run: RunInfo): RunState {
       handles: s.handles ?? undefined,
       startedAt: s.started_at ?? undefined,
       finishedAt: s.finished_at ?? undefined,
+      ...(s.calls ? { calls: s.calls } : {}),
     };
   }
   return {
@@ -224,4 +318,14 @@ export function edgeRunState(
   const handle = edge.sourceHandle ?? "out";
   if (source.handles && !source.handles.includes(handle)) return "skipped";
   return nodes[edge.target]?.status === "running" ? "active" : "delivered";
+}
+
+/** A tool attachment: busy while the tool runs, used once it has been called. */
+export function toolEdgeRunState(
+  nodes: Record<string, NodeRun>,
+  edge: { target: string },
+): EdgeRunState {
+  const tool = nodes[edge.target];
+  if (!tool?.calls) return null;
+  return tool.status === "running" ? "active" : "delivered";
 }
