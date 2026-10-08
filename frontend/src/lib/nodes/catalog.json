@@ -7,6 +7,7 @@
       "label": "Manual Trigger",
       "description": "Start the flow with a button click, optionally with input text.",
       "refPrefix": "trigger",
+      "outputHint": "The input text you run the flow with",
       "inputs": [],
       "outputs": [
         {
@@ -35,6 +36,7 @@
       "label": "Webhook",
       "description": "Start the flow when an HTTP request hits this flow's URL.",
       "refPrefix": "webhook",
+      "outputHint": "The request: {body, query, headers}",
       "inputs": [],
       "outputs": [
         {
@@ -85,6 +87,7 @@
       "label": "Schedule",
       "description": "Run on a cron schedule.",
       "refPrefix": "schedule",
+      "outputHint": "When it fired: {scheduled_at}",
       "inputs": [],
       "outputs": [
         {
@@ -122,6 +125,7 @@
       "label": "Email Listener",
       "description": "Start the flow when an email arrives.",
       "refPrefix": "inbox",
+      "outputHint": "The email: {from, subject, text}",
       "inputs": [],
       "outputs": [
         {
@@ -157,10 +161,15 @@
       "label": "Agent",
       "description": "An LLM with a system prompt that can call connected tools.",
       "refPrefix": "agent",
+      "outputHint": "The agent's reply (text)",
       "inputs": [
         {
           "id": "in",
           "kind": "data"
+        },
+        {
+          "id": "tool",
+          "kind": "tool"
         }
       ],
       "outputs": [
@@ -177,6 +186,7 @@
       "defaultData": {
         "model": "gpt-4o",
         "system_prompt": "",
+        "prompt": "{{input}}",
         "temperature": 0.7,
         "max_tool_steps": 5
       },
@@ -205,6 +215,15 @@
           "required": false,
           "templated": true,
           "rows": 6
+        },
+        {
+          "key": "prompt",
+          "label": "Task",
+          "kind": "textarea",
+          "help": "The message the agent answers. {{input}} is the previous node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 3
         },
         {
           "key": "temperature",
@@ -236,10 +255,15 @@
       "label": "Supervisor Agent",
       "description": "Delegates sub-tasks to connected worker agents and combines their results.",
       "refPrefix": "supervisor",
+      "outputHint": "The combined answer (text)",
       "inputs": [
         {
           "id": "in",
           "kind": "data"
+        },
+        {
+          "id": "tool",
+          "kind": "tool"
         }
       ],
       "outputs": [
@@ -256,6 +280,7 @@
       "defaultData": {
         "model": "gpt-4o",
         "system_prompt": "",
+        "prompt": "{{input}}",
         "temperature": 0.3,
         "max_rounds": 5
       },
@@ -286,6 +311,15 @@
           "rows": 6
         },
         {
+          "key": "prompt",
+          "label": "Task",
+          "kind": "textarea",
+          "help": "The message the agent answers. {{input}} is the previous node's output.",
+          "required": false,
+          "templated": true,
+          "rows": 3
+        },
+        {
           "key": "temperature",
           "label": "Temperature",
           "kind": "number",
@@ -314,6 +348,7 @@
       "label": "Web Search",
       "description": "Search the web (Tavily or DuckDuckGo).",
       "refPrefix": "web_search",
+      "outputHint": "Search results: [{title, url, snippet}]",
       "inputs": [
         {
           "id": "tool",
@@ -362,6 +397,7 @@
       "label": "Web Scraper",
       "description": "Fetch a URL and extract its readable content.",
       "refPrefix": "scraper",
+      "outputHint": "The page: {url, title, text}",
       "inputs": [
         {
           "id": "tool",
@@ -392,6 +428,7 @@
       "label": "Python Code",
       "description": "Run Python code in a sandbox.",
       "refPrefix": "python",
+      "outputHint": "The value main() returned",
       "inputs": [
         {
           "id": "tool",
@@ -433,6 +470,7 @@
       "label": "API Caller",
       "description": "Call a REST API endpoint.",
       "refPrefix": "api",
+      "outputHint": "The response: {status, body}",
       "inputs": [
         {
           "id": "tool",
@@ -507,9 +545,10 @@
     {
       "type": "kb_upload",
       "category": "knowledge",
-      "label": "Document Upload",
-      "description": "Upload PDFs or text into a knowledge base.",
-      "refPrefix": "upload",
+      "label": "Add to Knowledge Base",
+      "description": "Store text produced in this flow (e.g. a scraped page) in a knowledge base.",
+      "refPrefix": "kb_add",
+      "outputHint": "The stored document: {id, chunks}",
       "inputs": [
         {
           "id": "in",
@@ -524,29 +563,32 @@
       ],
       "defaultData": {
         "knowledge_base_id": null,
-        "chunk_size": 1000,
-        "chunk_overlap": 200
+        "title": "",
+        "content": "{{input}}"
       },
       "fields": [
         {
-          "key": "chunk_size",
-          "label": "Chunk size",
-          "kind": "number",
-          "required": false,
-          "templated": false,
-          "min": 100,
-          "max": 8000,
-          "step": 100
+          "key": "knowledge_base_id",
+          "label": "Knowledge base",
+          "kind": "knowledge_base",
+          "required": true,
+          "templated": false
         },
         {
-          "key": "chunk_overlap",
-          "label": "Chunk overlap",
-          "kind": "number",
+          "key": "title",
+          "label": "Document title",
+          "kind": "text",
+          "placeholder": "Defaults to the run time",
           "required": false,
-          "templated": false,
-          "min": 0,
-          "max": 2000,
-          "step": 50
+          "templated": true
+        },
+        {
+          "key": "content",
+          "label": "Content",
+          "kind": "textarea",
+          "required": true,
+          "templated": true,
+          "rows": 4
         }
       ],
       "comingSoon": true
@@ -557,6 +599,7 @@
       "label": "Retriever",
       "description": "Find relevant chunks in a knowledge base. Works as a step or an agent tool.",
       "refPrefix": "retriever",
+      "outputHint": "Matching chunks: [{text, source, score}]",
       "inputs": [
         {
           "id": "in",
@@ -575,9 +618,26 @@
       ],
       "defaultData": {
         "knowledge_base_id": null,
+        "query": "{{input}}",
         "top_k": 4
       },
       "fields": [
+        {
+          "key": "knowledge_base_id",
+          "label": "Knowledge base",
+          "kind": "knowledge_base",
+          "required": true,
+          "templated": false
+        },
+        {
+          "key": "query",
+          "label": "Query",
+          "kind": "textarea",
+          "help": "What to search for. When an agent uses this as a tool, it writes the query.",
+          "required": false,
+          "templated": true,
+          "rows": 2
+        },
         {
           "key": "top_k",
           "label": "Results (top k)",
@@ -597,6 +657,7 @@
       "label": "Notion",
       "description": "Load pages from Notion.",
       "refPrefix": "notion",
+      "outputHint": "The pages' text",
       "inputs": [
         {
           "id": "in",
@@ -624,7 +685,8 @@
           "shape": "array"
         }
       ],
-      "comingSoon": true
+      "comingSoon": true,
+      "deprecated": "Notion is now a knowledge-base source: add it to a knowledge base and use a Retriever node instead"
     },
     {
       "type": "kb_gdrive",
@@ -632,6 +694,7 @@
       "label": "Google Drive",
       "description": "Load files from Google Drive.",
       "refPrefix": "drive",
+      "outputHint": "The files' text",
       "inputs": [
         {
           "id": "in",
@@ -656,7 +719,8 @@
           "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": true,
+      "deprecated": "Google Drive is now a knowledge-base source: add it to a knowledge base and use a Retriever node instead"
     },
     {
       "type": "logic_if",
@@ -664,6 +728,7 @@
       "label": "If / Else",
       "description": "Branch based on a condition.",
       "refPrefix": "if",
+      "outputHint": "Its input, passed through unchanged",
       "inputs": [
         {
           "id": "in",
@@ -753,6 +818,7 @@
       "label": "Loop",
       "description": "Repeat a branch until a condition is met or the iteration limit is hit.",
       "refPrefix": "loop",
+      "outputHint": "This iteration's input",
       "inputs": [
         {
           "id": "in",
@@ -803,6 +869,7 @@
       "label": "Approval Gate",
       "description": "Pause the flow until a person approves or rejects.",
       "refPrefix": "approval",
+      "outputHint": "Its input, as approved (and possibly edited) by the reviewer",
       "inputs": [
         {
           "id": "in",
@@ -850,6 +917,7 @@
       "label": "Send Email",
       "description": "Send an email (Resend).",
       "refPrefix": "email",
+      "outputHint": "The sent message: {id}",
       "inputs": [
         {
           "id": "in",
@@ -901,6 +969,7 @@
       "label": "Slack Message",
       "description": "Post a message to a Slack channel.",
       "refPrefix": "slack",
+      "outputHint": "The posted message: {ts, channel}",
       "inputs": [
         {
           "id": "in",
@@ -944,6 +1013,7 @@
       "label": "Telegram Message",
       "description": "Send a Telegram message.",
       "refPrefix": "telegram",
+      "outputHint": "The sent message: {message_id}",
       "inputs": [
         {
           "id": "in",
@@ -986,6 +1056,7 @@
       "label": "HTTP Response",
       "description": "Reply to the webhook caller.",
       "refPrefix": "response",
+      "outputHint": "The response that was sent",
       "inputs": [
         {
           "id": "in",
@@ -1031,6 +1102,7 @@
       "label": "Database Write",
       "description": "Write a document to a Firestore collection.",
       "refPrefix": "db_write",
+      "outputHint": "The written document: {id}",
       "inputs": [
         {
           "id": "in",
@@ -1073,6 +1145,7 @@
       "label": "Output",
       "description": "Show the result in the run panel.",
       "refPrefix": "result",
+      "outputHint": "The value it displays (its input)",
       "inputs": [
         {
           "id": "in",

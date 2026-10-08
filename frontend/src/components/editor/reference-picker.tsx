@@ -24,7 +24,10 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
   const upstream = upstreamNodeIds(nodeId, edges)
     .map((id) => nodes.find((n) => n.id === id))
     .filter((n) => n !== undefined);
-  const hasInputs = edges.some((e) => (e.type ?? "data") === "data" && e.target === nodeId);
+  const senders = new Set(
+    edges.filter((e) => (e.type ?? "data") === "data" && e.target === nodeId).map((e) => e.source),
+  ).size;
+  const hasInputs = senders > 0;
 
   return (
     <>
@@ -32,7 +35,14 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => onInsert(formatInput())}>
             <CornerDownRight />
-            <span className="flex-1">Previous node&apos;s output</span>
+            <span className="flex-1">
+              Previous node&apos;s output
+              {senders > 1 && (
+                <span className="block text-xs text-muted-foreground">
+                  All {senders} inputs, keyed by name
+                </span>
+              )}
+            </span>
             <code className="text-xs text-muted-foreground">{formatInput()}</code>
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -47,9 +57,14 @@ function PickerItems({ nodeId, onInsert }: { nodeId: string; onInsert: (token: s
             const Icon = NODE_REGISTRY[n.type].icon;
             const token = formatReference(n.ref ?? n.id);
             return (
-              <DropdownMenuItem key={n.id} onClick={() => onInsert(token)}>
-                <Icon />
-                <span className="min-w-0 flex-1 truncate">{nodeDisplayName(n.type, n.data)}</span>
+              <DropdownMenuItem key={n.id} onClick={() => onInsert(token)} className="items-start">
+                <Icon className="mt-0.5" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{nodeDisplayName(n.type, n.data)}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {NODE_REGISTRY[n.type].outputHint}
+                  </span>
+                </span>
                 <code className="text-xs text-muted-foreground">{token}</code>
               </DropdownMenuItem>
             );

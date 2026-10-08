@@ -66,6 +66,8 @@ export type FieldDef = {
   | { kind: "select"; options: { value: string; label: string }[] }
   | { kind: "switch" }
   | { kind: "json"; rows?: number; shape?: "object" | "array" }
+  /** The id of one of the user's knowledge bases. */
+  | { kind: "knowledge_base" }
 );
 
 export interface NodeDefinition {
@@ -75,6 +77,8 @@ export interface NodeDefinition {
   description: string;
   /** Base of new nodes' reference names (`agent`, then `agent_2`, …). */
   refPrefix: string;
+  /** What `{{ref.output}}` holds once the node has run (the engine's output contract). */
+  outputHint: string;
   icon: LucideIcon;
   /** Target handles (left/top of the node). */
   inputs: HandleDef[];
@@ -88,6 +92,11 @@ export interface NodeDefinition {
    * Remove the flag when the node's executor ships.
    */
   comingSoon?: boolean;
+  /**
+   * Retired type: hidden from the palette but still loads and renders; flow validation reports
+   * this message (what replaced it).
+   */
+  deprecated?: string;
   /** One-line summary shown on the canvas node. */
   summary?: (data: NodeData) => string | undefined;
 }
@@ -179,11 +188,13 @@ export const NODE_REGISTRY: Record<NodeType, NodeDefinition> = buildRegistry();
 
 export const getNodeDefinition = (type: NodeType): NodeDefinition => NODE_REGISTRY[type];
 
-/** Registry entries grouped by category, in palette order. */
+/** Palette entries grouped by category, in palette order (retired types are left out). */
 export const NODES_BY_CATEGORY: { category: CategoryDefinition; nodes: NodeDefinition[] }[] =
   Object.values(CATEGORIES).map((category) => ({
     category,
-    nodes: Object.values(NODE_REGISTRY).filter((n) => n.category === category.id),
+    nodes: Object.values(NODE_REGISTRY).filter(
+      (n) => n.category === category.id && !n.deprecated,
+    ),
   }));
 
 /** Display name for a node: user label override, else the registry label. */

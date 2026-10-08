@@ -177,6 +177,17 @@ export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldPr
         />
       );
       break;
+    case "knowledge_base":
+      // Knowledge bases (Phase 7) are managed on their own page; until then there's nothing to
+      // pick, and nodes with this field are "Soon".
+      control = (
+        <Select disabled value={null}>
+          <SelectTrigger id={id} {...a11y} className="w-full">
+            <SelectValue placeholder="Knowledge bases are coming soon" />
+          </SelectTrigger>
+        </Select>
+      );
+      break;
     case "number":
       control = (
         <NumberInput id={id} field={field} value={value} onChange={onChange} invalid={invalid} />

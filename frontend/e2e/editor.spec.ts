@@ -1,4 +1,4 @@
-import { expect, importFixture, newUser, signUpViaUi, test } from "./helpers";
+import { expect, importFixture, newUser, openDashboard, signUpViaUi, test } from "./helpers";
 
 test("home → sign up → empty dashboard → new flow opens on the starter template", async ({
   editor,
@@ -24,7 +24,7 @@ test("home → sign up → empty dashboard → new flow opens on the starter tem
 test("palette searches and won't add 'Soon' nodes", async ({ editor, page }) => {
   await editor.open();
   await expect(editor.palette.locator("button[draggable=true]")).toHaveCount(9);
-  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(14);
+  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(12); // + 2 retired, hidden
 
   await page.getByLabel("Search nodes").fill("slack");
   const slack = editor.paletteItem("Slack Message");
@@ -168,4 +168,28 @@ test("theme toggle switches to dark mode", async ({ editor, page }) => {
   await editor.open();
   await page.getByRole("button", { name: "Toggle theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
+});
+
+test("flows containing retired node types still open, and explain what replaced them", async ({
+  editor,
+  page,
+}) => {
+  await openDashboard(page);
+  const flow = {
+    name: "Old Notion flow",
+    nodes: [
+      { id: "t", type: "trigger_manual", data: {}, position: { x: 0, y: 0 } },
+      { id: "n", type: "kb_notion", data: { page_ids: ["abc"] }, position: { x: 400, y: 0 } },
+    ],
+    edges: [{ id: "e", source: "t", target: "n", sourceHandle: "out", targetHandle: "in" }],
+  };
+  await page.locator("input[name=import-flow-file]").setInputFiles({
+    name: "old.mesh.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(flow)),
+  });
+  await expect(editor.node("Notion")).toBeVisible();
+  await expect(editor.palette.getByText("Notion", { exact: true })).toHaveCount(0); // not addable
+  await editor.issuesButton("1 error").click();
+  await expect(page.getByRole("menuitem", { name: /knowledge-base source/ })).toBeVisible();
 });

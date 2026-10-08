@@ -203,3 +203,18 @@ describe("parseFlowJson", () => {
     if (!result.ok) expect(result.error).toContain(message);
   });
 });
+
+describe("withFieldDefaults", () => {
+  it("fills fields a node type gained later, keeping existing and unknown values", async () => {
+    const { withFieldDefaults } = await import("./graph");
+    const old = { model: "claude-sonnet-5-5", system_prompt: "Be brief", custom: 1 };
+    expect(withFieldDefaults("agent_node", old)).toEqual({
+      ...old,
+      prompt: "{{input}}",
+      temperature: 0.7,
+      max_tool_steps: 5,
+    });
+    const complete = withFieldDefaults("agent_node", {});
+    expect(withFieldDefaults("agent_node", complete)).toBe(complete); // nothing to add → same object
+  });
+});

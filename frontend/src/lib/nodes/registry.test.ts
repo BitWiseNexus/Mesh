@@ -27,9 +27,11 @@ describe("node registry", () => {
     }
   });
 
-  it("groups every node into exactly one palette category", () => {
+  it("groups every non-retired node into exactly one palette category", () => {
     const grouped = NODES_BY_CATEGORY.flatMap((g) => g.nodes.map((n) => n.type));
-    expect(grouped.sort()).toEqual([...NODE_TYPES].sort());
+    const active = NODE_TYPES.filter((t) => !NODE_REGISTRY[t].deprecated);
+    expect(grouped.sort()).toEqual([...active].sort());
+    expect(grouped).not.toContain("kb_notion");
   });
 
   it("returns independent copies of default data", () => {

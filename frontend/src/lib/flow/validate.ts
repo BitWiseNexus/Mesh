@@ -58,6 +58,8 @@ export function fieldValueProblem(field: FieldDef, value: unknown): string | nul
       return field.options.some((o) => o.value === value) ? null : "has an unsupported value";
     case "switch":
       return typeof value === "boolean" ? null : "must be on or off";
+    case "knowledge_base":
+      return typeof value === "string" ? null : "must be a knowledge base";
     default:
       return typeof value === "string" ? null : "must be text";
   }
@@ -89,14 +91,22 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
       }
     }
   }
-  const attachedTools = new Set(
-    edges.filter((e) => e.type === "tool_connection").map((e) => e.target),
-  );
+  const toolEdges = edges.filter((e) => e.type === "tool_connection");
+  const dataEdges = edges.filter((e) => (e.type ?? "data") === "data");
+  const attachedTools = new Set(toolEdges.map((e) => e.target));
+  const inToolCycle = toolCycleNodes(toolEdges);
 
   for (const node of nodes) {
     const def = NODE_REGISTRY[node.type];
 
-    if (def.comingSoon) {
+    if (def.deprecated) {
+      issues.push({
+        id: `deprecated:${node.id}`,
+        severity: "error",
+        nodeId: node.id,
+        message: `${name(node)}: ${def.deprecated}`,
+      });
+    } else if (def.comingSoon) {
       issues.push({
         id: `unavailable:${node.id}`,
         severity: "error",
@@ -118,6 +128,28 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
         severity: "warning",
         nodeId: node.id,
         message: `${name(node)} isn't connected to a trigger and will never run`,
+      });
+    }
+
+    // A node used as a tool is invoked by its agent; it can't also be a step in the flow.
+    if (
+      attachedTools.has(node.id) &&
+      dataEdges.some((e) => e.source === node.id || e.target === node.id)
+    ) {
+      issues.push({
+        id: `tool-and-step:${node.id}`,
+        severity: "error",
+        nodeId: node.id,
+        message: `${name(node)} is attached to an agent as a tool, so it can't also be connected as a step`,
+      });
+    }
+
+    if (inToolCycle.has(node.id)) {
+      issues.push({
+        id: `tool-cycle:${node.id}`,
+        severity: "error",
+        nodeId: node.id,
+        message: `${name(node)} is part of a loop of tool attachments (agents can't use each other in a circle)`,
       });
     }
 
@@ -166,6 +198,14 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
             field: field.key,
             message: `${name(node)}: ${field.label} ${refProblem}`,
           });
+        } else if (ambiguousInput(value, node, nodes, dataEdges)) {
+          issues.push({
+            id: `ambiguous-input:${node.id}:${field.key}`,
+            severity: "warning",
+            nodeId: node.id,
+            field: field.key,
+            message: `${name(node)}: ${field.label} uses {{input}}, but several nodes feed into it, so {{input}} holds all their outputs — pick one with Insert`,
+          });
         }
       }
     }
@@ -200,6 +240,45 @@ function referenceProblem(
     }
   }
   return null;
+}
+
+/**
+ * With several incoming connections, `{{input}}` is an object keyed by each sender's ref. A bare
+ * `{{input}}` (or `{{input.x}}` where x isn't a sender) is then almost certainly not what was meant.
+ */
+function ambiguousInput(
+  value: string,
+  node: CanvasNode,
+  nodes: CanvasNode[],
+  dataEdges: CanvasEdge[],
+): boolean {
+  const senders = new Set(dataEdges.filter((e) => e.target === node.id).map((e) => e.source));
+  if (senders.size < 2) return false;
+  const senderRefs = new Set(nodes.filter((n) => senders.has(n.id)).map((n) => n.ref ?? n.id));
+  return parseTemplate(value).some(
+    (p) => p.kind === "input" && (p.path.length === 0 || !senderRefs.has(p.path[0])),
+  );
+}
+
+/** Ids of nodes on a cycle of tool attachments (A uses B as a tool, B uses A, …). */
+function toolCycleNodes(toolEdges: CanvasEdge[]): Set<string> {
+  const inCycle = new Set<string>();
+  for (const start of new Set(toolEdges.map((e) => e.source))) {
+    const seen = new Set<string>();
+    const queue = [start];
+    while (queue.length) {
+      const current = queue.shift()!;
+      for (const e of toolEdges) {
+        if (e.source !== current) continue;
+        if (e.target === start) inCycle.add(start);
+        if (!seen.has(e.target)) {
+          seen.add(e.target);
+          queue.push(e.target);
+        }
+      }
+    }
+  }
+  return inCycle;
 }
 
 /** Groups issues by node id. */

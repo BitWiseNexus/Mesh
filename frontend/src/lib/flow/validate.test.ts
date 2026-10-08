@@ -83,6 +83,14 @@ describe("validateFlow", () => {
     expect(issues[0].message).toContain("URL is required");
   });
 
+  it("flags retired node types with what replaced them, instead of 'not available'", () => {
+    const nodes = [node("t", "trigger_manual"), node("n", "kb_notion", { page_ids: ["p1"] })];
+    const issues = validateFlow(nodes, [edge("t", "n")]);
+    expect(issues.map((i) => i.id)).toContain("deprecated:n");
+    expect(issues.map((i) => i.id)).not.toContain("unavailable:n");
+    expect(issues.find((i) => i.id === "deprecated:n")?.message).toContain("knowledge-base source");
+  });
+
   it("flags nodes that aren't available yet", () => {
     const nodes = [
       node("t", "trigger_manual"),
@@ -185,5 +193,55 @@ describe("template references", () => {
       secret: "{{nonsense}}",
     });
     expect(validateFlow([hook], []).some((i) => i.id.startsWith("reference:"))).toBe(false);
+  });
+});
+
+describe("tools, workers and multiple inputs (R3)", () => {
+  const agent = (id: string, data?: NodeData) => ({
+    ...node(id, "agent_node", data ?? createDefaultData("agent_node")),
+    ref: id,
+  });
+  const toolEdge = (from: string, to: string) => edge(from, to, "tools", "tool_connection");
+
+  it("lets an agent be attached to another agent as a tool", () => {
+    const nodes = [node("t", "trigger_manual"), agent("lead"), agent("worker")];
+    expect(ids(nodes, [edge("t", "lead"), toolEdge("lead", "worker")])).toEqual([]);
+  });
+
+  it("rejects a node that is both a tool and a step", () => {
+    const nodes = [node("t", "trigger_manual"), agent("lead"), agent("worker")];
+    const issues = ids(nodes, [edge("t", "lead"), toolEdge("lead", "worker"), edge("t", "worker")]);
+    expect(issues).toContain("tool-and-step:worker");
+  });
+
+  it("rejects tool attachments that form a loop", () => {
+    const nodes = [node("t", "trigger_manual"), agent("a"), agent("b")];
+    const issues = ids(nodes, [edge("t", "a"), toolEdge("a", "b"), toolEdge("b", "a")]);
+    expect(issues).toEqual(expect.arrayContaining(["tool-cycle:a", "tool-cycle:b"]));
+  });
+
+  describe("{{input}} with several inputs", () => {
+    const build = (prompt: string) => [
+      { ...node("t", "trigger_manual"), ref: "trigger" },
+      agent("a"),
+      agent("b"),
+      agent("join", { ...createDefaultData("agent_node"), prompt }),
+    ];
+    const edges = [edge("t", "a"), edge("t", "b"), edge("a", "join"), edge("b", "join")];
+    const warning = (prompt: string) =>
+      validateFlow(build(prompt), edges).find((i) => i.id === "ambiguous-input:join:prompt");
+
+    it.each(["{{input}}", "{{input.title}}"])("warns for %s", (prompt) => {
+      expect(warning(prompt)).toMatchObject({ severity: "warning", field: "prompt" });
+    });
+
+    it.each(["{{input.a}} vs {{input.b}}", "{{a.output}}", "no reference"])("accepts %s", (prompt) => {
+      expect(warning(prompt)).toBeUndefined();
+    });
+
+    it("doesn't warn with a single input", () => {
+      const single = validateFlow(build("{{input}}").slice(0, 2), [edge("t", "a")]);
+      expect(single.some((i) => i.id.startsWith("ambiguous-input"))).toBe(false);
+    });
   });
 });

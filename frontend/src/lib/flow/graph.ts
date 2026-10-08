@@ -59,13 +59,14 @@ export function toFlow(meta: FlowMeta, nodes: CanvasNode[], edges: CanvasEdge[])
 
 export function fromFlow(flow: Flow): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
   return {
-    // Every canvas node has a valid, unique ref (older flows and imports may lack them).
+    // Every canvas node has a valid, unique ref and a value for every field its type defines
+    // (older flows and imports may predate either).
     nodes: normalizeRefs(
       flow.nodes.map((n) => ({
         id: n.id,
         type: n.type,
         ref: n.ref,
-        data: n.data,
+        data: withFieldDefaults(n.type, n.data),
         position: n.position,
       })),
     ),
@@ -79,6 +80,19 @@ export function fromFlow(flow: Flow): { nodes: CanvasNode[]; edges: CanvasEdge[]
       animated: e.animated ?? false,
     })),
   };
+}
+
+/**
+ * Fills in config fields a node type gained after the node was saved (e.g. an agent's Task) with
+ * their defaults. Existing values, and keys the catalog doesn't know, are kept as they are.
+ */
+export function withFieldDefaults(type: NodeType, data: NodeData): NodeData {
+  const def = NODE_REGISTRY[type];
+  const missing = def.fields.filter((f) => !(f.key in data));
+  if (missing.length === 0) return data;
+  const filled: NodeData = { ...data };
+  for (const f of missing) filled[f.key] = structuredClone(def.defaultData[f.key]);
+  return filled;
 }
 
 // ── Connection rules ──────────────────────────────────────────────────────

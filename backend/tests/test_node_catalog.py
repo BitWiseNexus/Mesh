@@ -34,6 +34,7 @@ def spec(**overrides) -> NodeSpec:
         category=NodeCategory.AGENT,
         label="Agent",
         ref_prefix="agent",
+        output_hint="text",
         description="d",
         inputs=[IN],
         outputs=[OUT],
@@ -92,3 +93,20 @@ def test_inconsistent_specs_are_rejected(overrides: dict, message: str) -> None:
 def test_inconsistent_fields_are_rejected(field: dict, message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         FieldSpec(key="k", label="K", **field)
+
+
+def test_knowledge_nodes_pick_a_knowledge_base() -> None:
+    for node_type in (NodeType.KB_RETRIEVER, NodeType.KB_UPLOAD):
+        field = next(f for f in CATALOG[node_type].fields if f.key == "knowledge_base_id")
+        assert field.kind == "knowledge_base" and field.required
+
+
+def test_retired_sources_are_deprecated_but_still_defined() -> None:
+    """Notion/Drive moved to knowledge-base sources; saved flows containing them must still load."""
+    for node_type in (NodeType.KB_NOTION, NodeType.KB_GDRIVE):
+        assert "knowledge-base source" in (CATALOG[node_type].deprecated or "")
+    assert all(
+        not s.deprecated
+        for t, s in CATALOG.items()
+        if t not in {NodeType.KB_NOTION, NodeType.KB_GDRIVE}
+    )

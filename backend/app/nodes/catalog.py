@@ -37,7 +37,10 @@ class OptionSpec(_Spec):
     label: str
 
 
-FieldKind = Literal["text", "textarea", "code", "number", "select", "switch", "json"]
+#: `knowledge_base` holds the id of one of the user's knowledge bases (picked from a list).
+FieldKind = Literal[
+    "text", "textarea", "code", "number", "select", "switch", "json", "knowledge_base"
+]
 
 
 class FieldSpec(_Spec):
@@ -83,6 +86,9 @@ class NodeSpec(_Spec):
     description: str
     #: Base of the readable reference name new nodes get (`agent`, then `agent_2`, …).
     ref_prefix: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    #: What `{{ref.output}}` holds once the node has run — the engine's output contract for this
+    #: type, also shown in the editor's reference picker.
+    output_hint: str
     #: Target handles (left/top of the node).
     inputs: list[HandleSpec]
     #: Source handles (right/bottom of the node).
@@ -92,6 +98,9 @@ class NodeSpec(_Spec):
     #: Not executable yet (lands after the first runnable release, Phases 3–6): the palette shows
     #: a "Soon" badge and flow validation rejects it. Remove when the node's executor ships.
     coming_soon: bool = False
+    #: Retired node type: hidden from the palette, still loads and renders (so saved flows keep
+    #: opening), and flow validation reports this message telling the user what replaced it.
+    deprecated: str | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
@@ -164,6 +173,13 @@ def agent_fields(*extra: FieldSpec) -> list[FieldSpec]:
             placeholder="You are a helpful assistant…",
             templated=True,
         ),
+        textarea(
+            "prompt",
+            "Task",
+            rows=3,
+            templated=True,
+            help="The message the agent answers. {{input}} is the previous node's output.",
+        ),
         number("temperature", "Temperature", 0, 2, 0.1),
         *extra,
     ]
@@ -195,6 +211,7 @@ _SPECS: list[NodeSpec] = [
     trigger(
         type=T.TRIGGER_MANUAL,
         ref_prefix="trigger",
+        output_hint="The input text you run the flow with",
         label="Manual Trigger",
         description="Start the flow with a button click, optionally with input text.",
         default_data={"input": ""},
@@ -205,6 +222,7 @@ _SPECS: list[NodeSpec] = [
     trigger(
         type=T.TRIGGER_WEBHOOK,
         ref_prefix="webhook",
+        output_hint="The request: {body, query, headers}",
         coming_soon=True,
         label="Webhook",
         description="Start the flow when an HTTP request hits this flow's URL.",
@@ -223,6 +241,7 @@ _SPECS: list[NodeSpec] = [
     trigger(
         type=T.TRIGGER_CRON,
         ref_prefix="schedule",
+        output_hint="When it fired: {scheduled_at}",
         coming_soon=True,
         label="Schedule",
         description="Run on a cron schedule.",
@@ -237,6 +256,7 @@ _SPECS: list[NodeSpec] = [
     trigger(
         type=T.TRIGGER_EMAIL,
         ref_prefix="inbox",
+        output_hint="The email: {from, subject, text}",
         coming_soon=True,
         label="Email Listener",
         description="Start the flow when an email arrives.",
@@ -247,14 +267,16 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.AGENT_NODE,
         ref_prefix="agent",
+        output_hint="The agent's reply (text)",
         category=NodeCategory.AGENT,
-        inputs=[IN],
+        inputs=[IN, TOOL],  # TOOL: attachable to another agent as a tool / worker
         outputs=[OUT, TOOLS],
         label="Agent",
         description="An LLM with a system prompt that can call connected tools.",
         default_data={
             "model": "gpt-4o",
             "system_prompt": "",
+            "prompt": "{{input}}",
             "temperature": 0.7,
             "max_tool_steps": 5,
         },
@@ -267,19 +289,27 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.AGENT_SUPERVISOR,
         ref_prefix="supervisor",
+        output_hint="The combined answer (text)",
         coming_soon=True,
         category=NodeCategory.AGENT,
-        inputs=[IN],
+        inputs=[IN, TOOL],  # TOOL: attachable to another agent as a tool / worker
         outputs=[OUT, TOOLS],
         label="Supervisor Agent",
         description="Delegates sub-tasks to connected worker agents and combines their results.",
-        default_data={"model": "gpt-4o", "system_prompt": "", "temperature": 0.3, "max_rounds": 5},
+        default_data={
+            "model": "gpt-4o",
+            "system_prompt": "",
+            "prompt": "{{input}}",
+            "temperature": 0.3,
+            "max_rounds": 5,
+        },
         fields=agent_fields(number("max_rounds", "Max delegation rounds", 1, 20)),
     ),
     # Tools (attached to agents via tool_connection)
     tool(
         type=T.TOOL_WEB_SEARCH,
         ref_prefix="web_search",
+        output_hint="Search results: [{title, url, snippet}]",
         label="Web Search",
         description="Search the web (Tavily or DuckDuckGo).",
         default_data={"provider": "tavily", "max_results": 5},
@@ -299,6 +329,7 @@ _SPECS: list[NodeSpec] = [
     tool(
         type=T.TOOL_WEB_SCRAPER,
         ref_prefix="scraper",
+        output_hint="The page: {url, title, text}",
         label="Web Scraper",
         description="Fetch a URL and extract its readable content.",
         default_data={"max_chars": 20000},
@@ -307,6 +338,7 @@ _SPECS: list[NodeSpec] = [
     tool(
         type=T.TOOL_PYTHON,
         ref_prefix="python",
+        output_hint="The value main() returned",
         coming_soon=True,
         label="Python Code",
         description="Run Python code in a sandbox.",
@@ -327,6 +359,7 @@ _SPECS: list[NodeSpec] = [
     tool(
         type=T.TOOL_HTTP,
         ref_prefix="api",
+        output_hint="The response: {status, body}",
         label="API Caller",
         description="Call a REST API endpoint.",
         default_data={"method": "GET", "url": "", "headers": {}, "body": ""},
@@ -349,36 +382,66 @@ _SPECS: list[NodeSpec] = [
         ],
     ),
     # Knowledge / RAG
+    # Knowledge bases themselves (documents, sources, chunking, embeddings) are managed on the
+    # Knowledge Bases page; flows only read from (Retriever) or add to (kb_upload) one.
     step(
         NodeCategory.KNOWLEDGE,
-        type=T.KB_UPLOAD,
-        ref_prefix="upload",
+        type=T.KB_UPLOAD,  # id kept from "Document Upload" so saved flows still load
+        ref_prefix="kb_add",
+        output_hint="The stored document: {id, chunks}",
         coming_soon=True,
-        label="Document Upload",
-        description="Upload PDFs or text into a knowledge base.",
-        default_data={"knowledge_base_id": None, "chunk_size": 1000, "chunk_overlap": 200},
+        label="Add to Knowledge Base",
+        description="Store text produced in this flow (e.g. a scraped page) in a knowledge base.",
+        default_data={"knowledge_base_id": None, "title": "", "content": "{{input}}"},
         fields=[
-            number("chunk_size", "Chunk size", 100, 8000, 100),
-            number("chunk_overlap", "Chunk overlap", 0, 2000, 50),
+            FieldSpec(
+                key="knowledge_base_id",
+                label="Knowledge base",
+                kind="knowledge_base",
+                required=True,
+            ),
+            text("title", "Document title", templated=True, placeholder="Defaults to the run time"),
+            textarea("content", "Content", rows=4, templated=True, required=True),
         ],
     ),
     NodeSpec(
         type=T.KB_RETRIEVER,
         ref_prefix="retriever",
+        output_hint="Matching chunks: [{text, source, score}]",
         coming_soon=True,
         category=NodeCategory.KNOWLEDGE,
         inputs=[IN, TOOL],
         outputs=[OUT],
         label="Retriever",
         description="Find relevant chunks in a knowledge base. Works as a step or an agent tool.",
-        default_data={"knowledge_base_id": None, "top_k": 4},
-        fields=[number("top_k", "Results (top k)", 1, 20)],
+        default_data={"knowledge_base_id": None, "query": "{{input}}", "top_k": 4},
+        fields=[
+            FieldSpec(
+                key="knowledge_base_id",
+                label="Knowledge base",
+                kind="knowledge_base",
+                required=True,
+            ),
+            textarea(
+                "query",
+                "Query",
+                rows=2,
+                templated=True,
+                help="What to search for. When an agent uses this as a tool, it writes the query.",
+            ),
+            number("top_k", "Results (top k)", 1, 20),
+        ],
     ),
     step(
         NodeCategory.KNOWLEDGE,
         type=T.KB_NOTION,
         ref_prefix="notion",
+        output_hint="The pages' text",
         coming_soon=True,
+        deprecated=(
+            "Notion is now a knowledge-base source: add it to a knowledge base and use a "
+            "Retriever node instead"
+        ),
         label="Notion",
         description="Load pages from Notion.",
         default_data={"page_ids": []},
@@ -397,7 +460,12 @@ _SPECS: list[NodeSpec] = [
         NodeCategory.KNOWLEDGE,
         type=T.KB_GDRIVE,
         ref_prefix="drive",
+        output_hint="The files' text",
         coming_soon=True,
+        deprecated=(
+            "Google Drive is now a knowledge-base source: add it to a knowledge base and use a "
+            "Retriever node instead"
+        ),
         label="Google Drive",
         description="Load files from Google Drive.",
         default_data={"folder_id": ""},
@@ -407,6 +475,7 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.LOGIC_IF,
         ref_prefix="if",
+        output_hint="Its input, passed through unchanged",
         category=NodeCategory.LOGIC,
         inputs=[IN],
         outputs=[
@@ -439,6 +508,7 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.LOGIC_LOOP,
         ref_prefix="loop",
+        output_hint="This iteration's input",
         category=NodeCategory.LOGIC,
         inputs=[IN],
         outputs=[
@@ -461,6 +531,7 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.HITL_APPROVAL,
         ref_prefix="approval",
+        output_hint="Its input, as approved (and possibly edited) by the reviewer",
         category=NodeCategory.LOGIC,
         inputs=[IN],
         outputs=[
@@ -479,6 +550,7 @@ _SPECS: list[NodeSpec] = [
     action(
         type=T.ACTION_EMAIL,
         ref_prefix="email",
+        output_hint="The sent message: {id}",
         coming_soon=True,
         label="Send Email",
         description="Send an email (Resend).",
@@ -492,6 +564,7 @@ _SPECS: list[NodeSpec] = [
     action(
         type=T.ACTION_SLACK,
         ref_prefix="slack",
+        output_hint="The posted message: {ts, channel}",
         coming_soon=True,
         label="Slack Message",
         description="Post a message to a Slack channel.",
@@ -504,6 +577,7 @@ _SPECS: list[NodeSpec] = [
     action(
         type=T.ACTION_TELEGRAM,
         ref_prefix="telegram",
+        output_hint="The sent message: {message_id}",
         coming_soon=True,
         label="Telegram Message",
         description="Send a Telegram message.",
@@ -516,6 +590,7 @@ _SPECS: list[NodeSpec] = [
     action(
         type=T.ACTION_HTTP_RESPONSE,
         ref_prefix="response",
+        output_hint="The response that was sent",
         coming_soon=True,
         label="HTTP Response",
         description="Reply to the webhook caller.",
@@ -528,6 +603,7 @@ _SPECS: list[NodeSpec] = [
     action(
         type=T.ACTION_DB_WRITE,
         ref_prefix="db_write",
+        output_hint="The written document: {id}",
         coming_soon=True,
         label="Database Write",
         description="Write a document to a Firestore collection.",
@@ -540,6 +616,7 @@ _SPECS: list[NodeSpec] = [
     NodeSpec(
         type=T.OUTPUT_DISPLAY,
         ref_prefix="result",
+        output_hint="The value it displays (its input)",
         category=NodeCategory.ACTION,
         inputs=[IN],
         outputs=[],
