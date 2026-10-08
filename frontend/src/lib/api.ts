@@ -6,6 +6,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Extra fields of the backend's `detail` (e.g. `issues` of a refused run). */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -15,19 +17,22 @@ export class ApiError extends Error {
 async function toApiError(response: Response): Promise<ApiError> {
   let code = `http_${response.status}`;
   let message = `Request failed (${response.status})`;
+  let details: Record<string, unknown> = {};
   try {
     const body = await response.json();
     const detail = body?.detail;
-    if (detail && typeof detail === "object") {
-      code = detail.code ?? code;
-      message = detail.message ?? message;
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const { code: detailCode, message: detailMessage, ...rest } = detail;
+      code = detailCode ?? code;
+      message = detailMessage ?? message;
+      details = rest;
     } else if (typeof detail === "string") {
       message = detail;
     }
   } catch {
     // non-JSON error body — keep the generic message
   }
-  return new ApiError(response.status, code, message);
+  return new ApiError(response.status, code, message, details);
 }
 
 async function parse<T>(response: Response): Promise<T> {
@@ -45,6 +50,8 @@ export type GetIdToken = (forceRefresh?: boolean) => Promise<string | null>;
 
 export interface ApiClient {
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
+  /** The raw response of a successful request (e.g. to read a stream); errors still throw. */
+  fetch: (path: string, init?: RequestInit) => Promise<Response>;
   get: <T>(path: string) => Promise<T>;
   post: <T>(path: string, body?: unknown) => Promise<T>;
   put: <T>(path: string, body?: unknown) => Promise<T>;
@@ -71,14 +78,22 @@ export function createApiClient(getIdToken: GetIdToken, fetchImpl: typeof fetch 
     return fetchImpl(`${API_URL}${path}`, { ...init, headers });
   };
 
-  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  /** Sends with the current token; on an expired/invalid one, refreshes it and retries once. */
+  const sendWithRetry = async (path: string, init: RequestInit): Promise<Response> => {
     const response = await send(path, init, false);
-    if (response.status === 401) {
-      const error = await toApiError(response);
-      if (!RETRYABLE_AUTH_CODES.has(error.code)) throw error;
-      return parse<T>(await send(path, init, true));
-    }
-    return parse<T>(response);
+    if (response.status !== 401) return response;
+    const error = await toApiError(response);
+    if (!RETRYABLE_AUTH_CODES.has(error.code)) throw error;
+    return send(path, init, true);
+  };
+
+  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> =>
+    parse<T>(await sendWithRetry(path, init));
+
+  const fetchRaw = async (path: string, init: RequestInit = {}): Promise<Response> => {
+    const response = await sendWithRetry(path, init);
+    if (!response.ok) throw await toApiError(response);
+    return response;
   };
 
   const withBody = (method: string) => <T>(path: string, body?: unknown) =>
@@ -86,6 +101,7 @@ export function createApiClient(getIdToken: GetIdToken, fetchImpl: typeof fetch 
 
   return {
     request,
+    fetch: fetchRaw,
     get: (path) => request(path),
     post: withBody("POST"),
     put: withBody("PUT"),

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Branch demo",
+  "description": "",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": {
+        "input": "x"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_i",
+      "type": "logic_if",
+      "ref": "if",
+      "data": {
+        "field": "{{input}}",
+        "operator": "contains",
+        "value": "x"
+      },
+      "position": {
+        "x": 400,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "result",
+      "data": {},
+      "position": {
+        "x": 800,
+        "y": 0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "node_t",
+      "sourceHandle": "out",
+      "target": "node_i",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e2",
+      "source": "node_i",
+      "sourceHandle": "true",
+      "target": "node_o",
+      "targetHandle": "in"
+    }
+  ]
+}

@@ -11,6 +11,14 @@ import { X } from "lucide-react";
 
 import type { CanvasEdge } from "@/lib/flow/graph";
 import { CATEGORIES } from "@/lib/nodes/registry";
+import { cn } from "@/lib/utils";
+import { edgeRunState, useRunStore, type EdgeRunState } from "@/stores/run-store";
+
+const RUN_STROKE: Record<Exclude<EdgeRunState, null>, string> = {
+  active: "var(--run-active)",
+  delivered: "var(--run-done)",
+  skipped: "var(--muted-foreground)",
+};
 
 function DeleteEdgeButton({ id, x, y }: { id: string; x: number; y: number }) {
   const { deleteElements } = useReactFlow();
@@ -32,6 +40,8 @@ function DeleteEdgeButton({ id, x, y }: { id: string; x: number; y: number }) {
 /** Execution flow: output of the source feeds the target. */
 export function DataEdge(props: EdgeProps<CanvasEdge>) {
   const [path, labelX, labelY] = getBezierPath(props);
+  const { source, target, sourceHandleId } = props;
+  const run = useRunStore((s) => edgeRunState(s.nodes, { source, target, sourceHandle: sourceHandleId }));
   return (
     <>
       <BaseEdge
@@ -39,9 +49,13 @@ export function DataEdge(props: EdgeProps<CanvasEdge>) {
         path={path}
         markerEnd={props.markerEnd}
         interactionWidth={20}
+        className={cn(run === "active" && "mesh-edge-active")}
+        data-run-state={run ?? undefined}
         style={{
-          stroke: props.selected ? "var(--foreground)" : "var(--muted-foreground)",
-          strokeWidth: props.selected ? 2 : 1.5,
+          stroke: props.selected ? "var(--foreground)" : run ? RUN_STROKE[run] : "var(--muted-foreground)",
+          strokeWidth: props.selected || run === "active" ? 2 : 1.5,
+          opacity: run === "skipped" ? 0.35 : undefined,
+          strokeDasharray: run === "skipped" ? "4 4" : undefined,
         }}
       />
       {props.selected && <DeleteEdgeButton id={props.id} x={labelX} y={labelY} />}

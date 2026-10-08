@@ -1,6 +1,8 @@
 /**
  * Live flow validation shown while editing. Pure and cheap (O(nodes + edges)), so it can run on
- * every graph change. The backend graph compiler (step 3.1) must enforce the same `error` rules.
+ * every graph change. The backend (backend/app/engine/validation.py) reports exactly the same
+ * issues and refuses to run flows with errors; both are tested against
+ * `shared/validation-cases.json` — add a case there when changing a rule on either side.
  *
  * - error   → the flow can't run (Run is blocked)
  * - warning → the flow runs, but part of it will never execute or is likely a mistake
@@ -8,7 +10,7 @@
 import { NODE_REGISTRY, nodeDisplayName, type FieldDef } from "@/lib/nodes/registry";
 import type { NodeData } from "@/types/flow";
 
-import type { CanvasEdge, CanvasNode } from "./graph";
+import { findHandle, type CanvasEdge, type CanvasNode } from "./graph";
 import { parseTemplate } from "./references";
 import { findReferencedNode, upstreamNodeIds } from "./refs";
 
@@ -94,7 +96,14 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
   const toolEdges = edges.filter((e) => e.type === "tool_connection");
   const dataEdges = edges.filter((e) => (e.type ?? "data") === "data");
   const attachedTools = new Set(toolEdges.map((e) => e.target));
-  const inToolCycle = toolCycleNodes(toolEdges);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const inToolCycle = new Set(cycles(toolEdges).flat());
+  // Data cycles are only allowed through a Loop node, which bounds how often they repeat.
+  const unboundedCycle = new Set(
+    cycles(dataEdges)
+      .filter((c) => !c.some((id) => byId.get(id)?.type === "logic_loop"))
+      .flat(),
+  );
 
   for (const node of nodes) {
     const def = NODE_REGISTRY[node.type];
@@ -150,6 +159,15 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
         severity: "error",
         nodeId: node.id,
         message: `${name(node)} is part of a loop of tool attachments (agents can't use each other in a circle)`,
+      });
+    }
+
+    if (unboundedCycle.has(node.id)) {
+      issues.push({
+        id: `cycle-without-loop:${node.id}`,
+        severity: "error",
+        nodeId: node.id,
+        message: `${name(node)} is part of a cycle that doesn't go through a Loop node, so it would never finish`,
       });
     }
 
@@ -211,6 +229,20 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
     }
   }
 
+  // Connections the editor can't draw, but an imported file can contain.
+  for (const e of edges) {
+    const source = byId.get(e.source);
+    const target = byId.get(e.target);
+    if (source && target && !connectionFits(e, source, target)) {
+      issues.push({
+        id: `invalid-connection:${e.id}`,
+        severity: "error",
+        nodeId: target.id,
+        message: `The connection from ${name(source)} to ${name(target)} doesn't fit their handles — delete it and connect them again`,
+      });
+    }
+  }
+
   // Errors first, otherwise keep canvas order.
   return issues.sort((a, b) => Number(a.severity === "warning") - Number(b.severity === "warning"));
 }
@@ -260,25 +292,76 @@ function ambiguousInput(
   );
 }
 
-/** Ids of nodes on a cycle of tool attachments (A uses B as a tool, B uses A, …). */
-function toolCycleNodes(toolEdges: CanvasEdge[]): Set<string> {
-  const inCycle = new Set<string>();
-  for (const start of new Set(toolEdges.map((e) => e.source))) {
-    const seen = new Set<string>();
-    const queue = [start];
-    while (queue.length) {
-      const current = queue.shift()!;
-      for (const e of toolEdges) {
-        if (e.source !== current) continue;
-        if (e.target === start) inCycle.add(start);
-        if (!seen.has(e.target)) {
-          seen.add(e.target);
-          queue.push(e.target);
-        }
+/**
+ * The edge joins two existing handles of the kind its type needs (data ↔ data for `data` edges, an
+ * agent's Tools handle ↔ a tool handle for `tool_connection`).
+ */
+function connectionFits(edge: CanvasEdge, source: CanvasNode, target: CanvasNode): boolean {
+  const kind = edge.type === "tool_connection" ? "tool" : "data";
+  return (
+    findHandle(source, edge.sourceHandle, "source")?.kind === kind &&
+    findHandle(target, edge.targetHandle, "target")?.kind === kind
+  );
+}
+
+/**
+ * Groups of nodes that lie on a cycle of `edges` (strongly connected components with more than one
+ * node; self-connections aren't allowed). Iterative Kosaraju, O(nodes + edges).
+ */
+function cycles(edges: Pick<CanvasEdge, "source" | "target">[]): string[][] {
+  const forward = new Map<string, string[]>();
+  const backward = new Map<string, string[]>();
+  const link = (map: Map<string, string[]>, from: string, to: string) => {
+    const targets = map.get(from);
+    if (targets) targets.push(to);
+    else map.set(from, [to]);
+    if (!map.has(to)) map.set(to, []);
+  };
+  for (const e of edges) {
+    link(forward, e.source, e.target);
+    link(backward, e.target, e.source);
+  }
+
+  // Pass 1: nodes in order of DFS completion.
+  const finished: string[] = [];
+  const visited = new Set<string>();
+  for (const start of forward.keys()) {
+    if (visited.has(start)) continue;
+    visited.add(start);
+    const stack: [string, number][] = [[start, 0]];
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      const successors = forward.get(top[0])!;
+      while (top[1] < successors.length && visited.has(successors[top[1]])) top[1]++;
+      if (top[1] === successors.length) {
+        stack.pop();
+        finished.push(top[0]);
+      } else {
+        const next = successors[top[1]++];
+        visited.add(next);
+        stack.push([next, 0]);
       }
     }
   }
-  return inCycle;
+
+  // Pass 2: walk the reversed graph in reverse completion order; each walk is one component.
+  const assigned = new Set<string>();
+  const components: string[][] = [];
+  for (const start of finished.reverse()) {
+    if (assigned.has(start)) continue;
+    const component = [start];
+    assigned.add(start);
+    for (let i = 0; i < component.length; i++) {
+      for (const prev of backward.get(component[i])!) {
+        if (!assigned.has(prev)) {
+          assigned.add(prev);
+          component.push(prev);
+        }
+      }
+    }
+    if (component.length > 1) components.push(component);
+  }
+  return components;
 }
 
 /** Groups issues by node id. */

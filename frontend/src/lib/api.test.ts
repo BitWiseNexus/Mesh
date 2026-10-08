@@ -73,6 +73,30 @@ describe("createApiClient", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps extra detail fields, e.g. a refused run's issues", async () => {
+    const issues = [{ id: "not-runnable:if", message: "can't run yet" }];
+    const { api } = setup([
+      json(422, { detail: { code: "nodes_not_runnable", message: "Nope", issues } }),
+    ]);
+    await expect(api.post("/flows/f/runs")).rejects.toMatchObject({
+      code: "nodes_not_runnable",
+      message: "Nope",
+      details: { issues },
+    });
+  });
+
+  it("fetch returns the raw response, with the same auth retry and errors", async () => {
+    const { api, authHeader } = setup([
+      json(401, { detail: { code: "token_expired", message: "expired" } }),
+      new Response("data: x\n\n", { status: 200 }),
+      json(404, { detail: { code: "run_not_found", message: "Run not found." } }),
+    ]);
+    const response = await api.fetch("/runs/r/stream");
+    await expect(response.text()).resolves.toBe("data: x\n\n");
+    expect(authHeader(1)).toBe("Bearer t2");
+    await expect(api.fetch("/runs/r/stream")).rejects.toMatchObject({ code: "run_not_found" });
+  });
+
   it("returns undefined for 204 No Content", async () => {
     const { api } = setup([new Response(null, { status: 204 })]);
     await expect(api.delete("/flows/f1")).resolves.toBeUndefined();

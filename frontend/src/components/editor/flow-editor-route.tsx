@@ -55,7 +55,7 @@ export function FlowEditorRoute() {
     const store = useFlowStore.getState();
     store.loadFlow(server);
     if (decision.kind === "restore") {
-      store.restoreLocal(decision.flow); // dirty → autosave pushes it
+      store.replaceContent(decision.flow); // dirty → autosave pushes it
       toast("Restored unsaved changes from your last session", {
         action: {
           label: "Discard",

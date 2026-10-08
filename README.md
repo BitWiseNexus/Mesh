@@ -8,7 +8,7 @@ knowledge, logic, actions) onto a canvas, connect them, and run them with live s
 | Folder | What's in it |
 |---|---|
 | `frontend/` | Next.js app: flow dashboard and React Flow editor |
-| `backend/` | FastAPI API and (soon) the flow execution engine |
+| `backend/` | FastAPI API and the flow execution engine |
 | `firebase/` | Firestore / Storage security rules and their tests |
 | `scripts/` | Local development tooling |
 
@@ -38,6 +38,24 @@ all of them). Services already running in another terminal are reused.
 | http://localhost:3000 | App |
 | http://localhost:8000/docs | API docs |
 | http://127.0.0.1:4000 | Firebase emulator UI |
+
+## Running flows
+
+Press **Run** in the editor (or Ctrl+Enter): the flow is saved, executed by the backend, and each
+node's status, the agents' streamed replies and a log appear live in the run panel.
+
+Agents call OpenAI, Anthropic or Google Gemini through [LiteLLM](https://docs.litellm.ai/). Add
+the keys you have to `backend/.env`:
+
+```bash
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
+```
+
+No keys yet? Set an agent's model to `mock/echo`: it streams its task back without calling any
+provider (available outside production). Nodes that can't run yet (If / Else, Loop, Approval Gate,
+tools) are reported when you press Run.
 
 ## Tests
 

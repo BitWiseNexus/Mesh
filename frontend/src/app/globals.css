@@ -140,3 +140,27 @@
   --xy-controls-button-border-color: var(--border);
   --xy-connectionline-stroke: var(--muted-foreground);
 }
+
+/* Run visualisation (same in both themes): sky = running / data moving, emerald = done. */
+:root {
+  --run-active: oklch(68.5% 0.169 237.323);
+  --run-done: oklch(69.6% 0.17 162.48);
+}
+
+/* Data moving along an edge into a running node. */
+@keyframes mesh-edge-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.mesh-edge-active {
+  stroke-dasharray: 8 4;
+  animation: mesh-edge-flow 0.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-edge-active {
+    animation: none;
+  }
+}

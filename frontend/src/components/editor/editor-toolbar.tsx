@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Play, Redo2, Undo2, Upload, Waypoints } from "lucide-react";
+import { Download, PanelBottomOpen, Redo2, Undo2, Upload, Waypoints } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,14 +16,24 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { parseFlowJson } from "@/lib/flow/graph";
 import { canRedo, canUndo, useFlowStore } from "@/stores/flow-store";
+import { useRunStore } from "@/stores/run-store";
 
 import { FlowIssuesMenu } from "./flow-issues-menu";
+import { RunButton } from "./run-button";
 import { SaveStatus } from "./save-status";
 
 const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flow";
 
-export function EditorToolbar({ onSave }: { onSave: () => void }) {
+export function EditorToolbar({
+  onSave,
+  onRun,
+  onStop,
+}: {
+  onSave: () => void;
+  onRun: (triggerId?: string) => void;
+  onStop: () => void;
+}) {
   const name = useFlowStore((s) => s.name);
   const setMeta = useFlowStore((s) => s.setMeta);
   const undo = useFlowStore((s) => s.undo);
@@ -35,6 +45,7 @@ export function EditorToolbar({ onSave }: { onSave: () => void }) {
   const { fitView } = useReactFlow();
   const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
+  const runPanelHidden = useRunStore((s) => s.phase !== "idle" && !s.panelOpen);
 
   /**
    * Leaving normally just works: autosave flushes pending edits on the way out. But if saving is
@@ -68,7 +79,7 @@ export function EditorToolbar({ onSave }: { onSave: () => void }) {
     URL.revokeObjectURL(url);
   };
 
-  /** Replaces this flow's content with a file's (the flow keeps its id; Save to persist). */
+  /** Replaces this flow's content with a file's (the flow keeps its id; autosave persists it). */
   const importFlow = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = ""; // allow re-importing the same file
@@ -88,12 +99,12 @@ export function EditorToolbar({ onSave }: { onSave: () => void }) {
         destructive: true,
       }));
     if (!replace) return;
-    const { flowId, version, loadFlow } = useFlowStore.getState();
-    // Keep this flow's identity so Save updates it rather than the file's original flow.
-    loadFlow({ ...result.flow, flow_id: flowId, version: version ?? undefined });
+    // An ordinary edit of *this* flow (its id and version stay): unsaved until autosave sends it,
+    // and Ctrl+Z brings the previous content back.
+    useFlowStore.getState().replaceContent(result.flow);
     // Wait a frame so React Flow has the new nodes before fitting.
     requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
-    toast.success(`Imported “${result.flow.name}” — save to keep it`);
+    toast.success(`Imported “${result.flow.name}”`);
   };
 
   return (
@@ -169,15 +180,19 @@ export function EditorToolbar({ onSave }: { onSave: () => void }) {
         />
         <ThemeToggle />
         <Separator orientation="vertical" className="mx-1 h-5" />
-        <Hint label="Running flows arrives in Phase 3">
-          {/* span wrapper: disabled buttons don't emit the pointer events tooltips need */}
-          <span tabIndex={0}>
-            <Button size="sm" disabled>
-              <Play />
-              Run
+        {runPanelHidden && (
+          <Hint label="Show run panel">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Show run panel"
+              onClick={() => useRunStore.getState().setPanelOpen(true)}
+            >
+              <PanelBottomOpen />
             </Button>
-          </span>
-        </Hint>
+          </Hint>
+        )}
+        <RunButton onRun={onRun} onStop={onStop} />
         <Separator orientation="vertical" className="mx-1 h-5" />
         <UserMenu />
       </div>

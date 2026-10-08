@@ -4,8 +4,14 @@
       "collectionGroup": "flows",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "owner_uid", "order": "ASCENDING" },
-        { "fieldPath": "updated_at", "order": "DESCENDING" }
+        {
+          "fieldPath": "owner_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
@@ -13,6 +19,16 @@
     {
       "collectionGroup": "flows",
       "fieldPath": "graph",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "runs",
+      "fieldPath": "node_states",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "runs",
+      "fieldPath": "input",
       "indexes": []
     }
   ]

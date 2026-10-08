@@ -229,8 +229,11 @@ interface FlowState {
   // Whole-flow operations
   /** Loads a flow as the saved (clean) state. */
   loadFlow: (flow: Flow & { version?: number }) => void;
-  /** Replaces the content with a locally recovered version (undoable), keeping id + version. */
-  restoreLocal: (flow: Flow) => void;
+  /**
+   * Replaces the content with `flow`'s as an ordinary edit — undoable, unsaved (so autosave sends
+   * it) — keeping this flow's id and version. Used for imports and recovered local edits.
+   */
+  replaceContent: (flow: Flow) => void;
   /**
    * Records a successful save of content with `fingerprint`. Ignored if another flow has been
    * opened meanwhile (saves can finish after the user navigated away).
@@ -399,7 +402,7 @@ export const useFlowStore = create<FlowState>()(
 
       loadFlow: (flow) => set(stateFromFlow(flow)),
 
-      restoreLocal: (flow) => {
+      replaceContent: (flow) => {
         get().snapshot(); // Ctrl+Z goes back to the server version
         const { nodes, edges } = fromFlow(flow);
         set({ name: flow.name, description: flow.description, nodes, edges, selectedNodeId: null });

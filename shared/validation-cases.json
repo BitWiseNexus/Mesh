@@ -1,0 +1,427 @@
+{
+  "$comment": "Shared test vectors for flow validation. The editor (frontend/src/lib/flow/validate.ts) and the backend (backend/app/engine/validation.py) must report exactly these issue ids, in this order, with these messages. Nodes: {id, type, ref? (defaults to id), data? (missing config fields are filled with catalog defaults, as when a flow loads)}. Edges: {from, to, type? ('data' | 'tool_connection'), handle? / targetHandle? (default 'out'/'in' for data, 'tools'/'tool' for tool_connection; null = the node's first handle), id? (default from-handle-to)}. messages: exact text for some of the issues.",
+  "cases": [
+    {
+      "name": "starter template",
+      "nodes": [{ "id": "t", "type": "trigger_manual" }, { "id": "out", "type": "output_display" }],
+      "edges": [{ "from": "t", "to": "out" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "empty canvas",
+      "nodes": [],
+      "edges": [],
+      "errors": ["no-trigger"],
+      "warnings": [],
+      "messages": { "no-trigger": "Add a trigger so the flow has a starting point" }
+    },
+    {
+      "name": "no trigger: no reachability warnings",
+      "nodes": [{ "id": "out", "type": "output_display" }],
+      "edges": [],
+      "errors": ["no-trigger"],
+      "warnings": []
+    },
+    {
+      "name": "several triggers",
+      "nodes": [
+        { "id": "t1", "type": "trigger_manual" },
+        { "id": "t2", "type": "trigger_manual" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [{ "from": "t1", "to": "out" }, { "from": "t2", "to": "out" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "nodes not reachable from a trigger",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [{ "from": "a", "to": "out" }],
+      "errors": [],
+      "warnings": ["unreachable:a", "unreachable:out"],
+      "messages": { "unreachable:a": "“Agent” isn't connected to a trigger and will never run" }
+    },
+    {
+      "name": "custom labels are trimmed and used in messages",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node", "data": { "label": "  Lead Parser " } }
+      ],
+      "edges": [],
+      "errors": [],
+      "warnings": ["unreachable:a"],
+      "messages": { "unreachable:a": "“Lead Parser” isn't connected to a trigger and will never run" }
+    },
+    {
+      "name": "tools attached to a reachable agent are reachable",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "s", "type": "tool_web_search" }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "s", "type": "tool_connection" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "tool not attached to an agent",
+      "nodes": [{ "id": "t", "type": "trigger_manual" }, { "id": "s", "type": "tool_web_search" }],
+      "edges": [],
+      "errors": [],
+      "warnings": ["unattached:s"],
+      "messages": { "unattached:s": "“Web Search” isn't attached to an agent's Tools handle" }
+    },
+    {
+      "name": "loop without a body",
+      "nodes": [{ "id": "t", "type": "trigger_manual" }, { "id": "l", "type": "logic_loop" }],
+      "edges": [{ "from": "t", "to": "l" }],
+      "errors": [],
+      "warnings": ["empty-loop:l"],
+      "messages": { "empty-loop:l": "“Loop” has nothing connected to its Loop output" }
+    },
+    {
+      "name": "empty required field; errors come before warnings",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "orphan", "type": "output_display" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "api", "type": "tool_http" }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "api", "type": "tool_connection" }],
+      "errors": ["required:api:url"],
+      "warnings": ["unreachable:orphan"],
+      "messages": { "required:api:url": "“API Caller”: URL is required" }
+    },
+    {
+      "name": "whitespace-only and null count as empty",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node", "data": { "model": null } },
+        { "id": "api", "type": "tool_http", "data": { "url": "   " } }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "api", "type": "tool_connection" }],
+      "errors": ["required:a:model", "required:api:url"],
+      "warnings": []
+    },
+    {
+      "name": "nodes saved before a field existed get its default",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual", "data": {} },
+        { "id": "a", "type": "agent_node", "data": { "model": "gpt-4o", "system_prompt": "Hi" } },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "out" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "retired node types say what replaced them",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "n", "type": "kb_notion", "data": { "page_ids": ["p1"] } }
+      ],
+      "edges": [{ "from": "t", "to": "n" }],
+      "errors": ["deprecated:n"],
+      "warnings": [],
+      "messages": {
+        "deprecated:n": "“Notion”: Notion is now a knowledge-base source: add it to a knowledge base and use a Retriever node instead"
+      }
+    },
+    {
+      "name": "nodes that aren't available yet",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "mail", "type": "action_email", "data": { "to": "a@b.co", "subject": "Hi" } }
+      ],
+      "edges": [{ "from": "t", "to": "mail" }],
+      "errors": ["unavailable:mail"],
+      "warnings": [],
+      "messages": { "unavailable:mail": "“Send Email”: Send Email nodes aren't available yet" }
+    },
+    {
+      "name": "invalid values: number range, type, text",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "low", "type": "agent_node", "data": { "temperature": -1 } },
+        { "id": "high", "type": "agent_node", "data": { "temperature": 2.5, "max_tool_steps": 26 } },
+        { "id": "hot", "type": "agent_node", "data": { "temperature": "hot", "model": 42 } },
+        { "id": "flag", "type": "agent_node", "data": { "temperature": true } }
+      ],
+      "edges": [
+        { "from": "t", "to": "low" },
+        { "from": "t", "to": "high" },
+        { "from": "t", "to": "hot" },
+        { "from": "t", "to": "flag" }
+      ],
+      "errors": [
+        "invalid:low:temperature",
+        "invalid:high:temperature",
+        "invalid:high:max_tool_steps",
+        "invalid:hot:model",
+        "invalid:hot:temperature",
+        "invalid:flag:temperature"
+      ],
+      "warnings": [],
+      "messages": {
+        "invalid:low:temperature": "“Agent”: Temperature must be between 0 and 2",
+        "invalid:high:max_tool_steps": "“Agent”: Max tool steps must be between 1 and 25",
+        "invalid:hot:model": "“Agent”: Model must be text",
+        "invalid:hot:temperature": "“Agent”: Temperature must be a number",
+        "invalid:flag:temperature": "“Agent”: Temperature must be a number"
+      }
+    },
+    {
+      "name": "invalid values: json shape, select option, switch",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "api", "type": "tool_http", "data": { "url": "https://x.io", "headers": ["x"] } },
+        { "id": "s", "type": "tool_web_search", "data": { "provider": "bing" } },
+        { "id": "ok", "type": "hitl_approval", "data": { "allow_edit": "yes" } }
+      ],
+      "edges": [
+        { "from": "t", "to": "a" },
+        { "from": "a", "to": "api", "type": "tool_connection" },
+        { "from": "a", "to": "s", "type": "tool_connection" },
+        { "from": "a", "to": "ok" }
+      ],
+      "errors": ["invalid:api:headers", "invalid:s:provider", "invalid:ok:allow_edit"],
+      "warnings": [],
+      "messages": {
+        "invalid:api:headers": "“API Caller”: Headers must be a JSON object",
+        "invalid:s:provider": "“Web Search”: Provider has an unsupported value",
+        "invalid:ok:allow_edit": "“Approval Gate”: Reviewer can edit the content must be on or off"
+      }
+    },
+    {
+      "name": "valid references (by ref, by id for older flows, with paths)",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual", "ref": "trigger" },
+        { "id": "a", "type": "agent_node", "ref": "agent" },
+        {
+          "id": "i",
+          "type": "logic_if",
+          "ref": "if",
+          "data": { "field": "{{agent.output.summary}} and {{trigger.output}}", "value": "{{a.output.0}} {{input}}" }
+        }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "i" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "invalid references",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual", "ref": "trigger" },
+        { "id": "a", "type": "agent_node", "ref": "agent" },
+        { "id": "api", "type": "tool_http", "ref": "api", "data": { "url": "https://x.io/{{agent.output}}" } },
+        { "id": "bad", "type": "logic_if", "ref": "bad", "data": { "field": "{{agent}}" } },
+        { "id": "g", "type": "logic_if", "ref": "ghost_if", "data": { "field": "{{ghost.output}}" } },
+        { "id": "self", "type": "logic_if", "ref": "self_if", "data": { "field": "{{ self_if.output }}" } },
+        { "id": "tool", "type": "logic_if", "ref": "tool_if", "data": { "field": "{{api.output}}" } }
+      ],
+      "edges": [
+        { "from": "t", "to": "a" },
+        { "from": "a", "to": "api", "type": "tool_connection" },
+        { "from": "a", "to": "bad" },
+        { "from": "a", "to": "g" },
+        { "from": "a", "to": "self" },
+        { "from": "a", "to": "tool" }
+      ],
+      "errors": [
+        "reference:api:url",
+        "reference:bad:field",
+        "reference:g:field",
+        "reference:self:field",
+        "reference:tool:field"
+      ],
+      "warnings": [],
+      "messages": {
+        "reference:api:url": "“API Caller”: URL refers to “Agent”, which doesn't run before this node",
+        "reference:bad:field": "“If / Else”: Value to check has an invalid reference {{agent}}",
+        "reference:g:field": "“If / Else”: Value to check refers to {{ghost.output}}, but no node is called “ghost”",
+        "reference:self:field": "“If / Else”: Value to check refers to this node's own output ({{self_if.output}})",
+        "reference:tool:field": "“If / Else”: Value to check refers to “API Caller”, which doesn't run before this node"
+      }
+    },
+    {
+      "name": "a tool sees what its agent sees",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual", "ref": "trigger" },
+        { "id": "a", "type": "agent_node", "ref": "agent" },
+        { "id": "api", "type": "tool_http", "ref": "api", "data": { "url": "https://x.io/{{trigger.output}}" } }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "api", "type": "tool_connection" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "only templated fields are checked for references",
+      "nodes": [{ "id": "w", "type": "trigger_webhook", "data": { "secret": "{{nonsense}}" } }],
+      "edges": [],
+      "errors": ["unavailable:w"],
+      "warnings": []
+    },
+    {
+      "name": "an agent attached to another agent as a tool",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "lead", "type": "agent_node" },
+        { "id": "worker", "type": "agent_node" }
+      ],
+      "edges": [{ "from": "t", "to": "lead" }, { "from": "lead", "to": "worker", "type": "tool_connection" }],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "a node can't be both a tool and a step",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "lead", "type": "agent_node" },
+        { "id": "worker", "type": "agent_node" }
+      ],
+      "edges": [
+        { "from": "t", "to": "lead" },
+        { "from": "lead", "to": "worker", "type": "tool_connection" },
+        { "from": "t", "to": "worker" }
+      ],
+      "errors": ["tool-and-step:worker"],
+      "warnings": [],
+      "messages": {
+        "tool-and-step:worker": "“Agent” is attached to an agent as a tool, so it can't also be connected as a step"
+      }
+    },
+    {
+      "name": "tool attachments can't form a cycle",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "b", "type": "agent_node" }
+      ],
+      "edges": [
+        { "from": "t", "to": "a" },
+        { "from": "a", "to": "b", "type": "tool_connection" },
+        { "from": "b", "to": "a", "type": "tool_connection" }
+      ],
+      "errors": ["tool-and-step:a", "tool-cycle:a", "tool-cycle:b"],
+      "warnings": [],
+      "messages": {
+        "tool-cycle:b": "“Agent” is part of a loop of tool attachments (agents can't use each other in a circle)"
+      }
+    },
+    {
+      "name": "{{input}} with several inputs is keyed by sender ref",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "n2", "type": "agent_node", "ref": "writer" },
+        { "id": "bare", "type": "agent_node", "data": { "prompt": "{{input}}" } },
+        { "id": "path", "type": "agent_node", "data": { "prompt": "{{input.title}}" } },
+        { "id": "by_id", "type": "agent_node", "data": { "prompt": "{{input.a}} vs {{input.n2}}" } },
+        { "id": "by_ref", "type": "agent_node", "data": { "prompt": "{{input.a}} vs {{input.writer}}" } },
+        { "id": "direct", "type": "agent_node", "data": { "prompt": "{{a.output}}" } }
+      ],
+      "edges": [
+        { "from": "t", "to": "a" },
+        { "from": "t", "to": "n2" },
+        { "from": "a", "to": "bare" },
+        { "from": "n2", "to": "bare" },
+        { "from": "a", "to": "path" },
+        { "from": "n2", "to": "path" },
+        { "from": "a", "to": "by_id" },
+        { "from": "n2", "to": "by_id" },
+        { "from": "a", "to": "by_ref" },
+        { "from": "n2", "to": "by_ref" },
+        { "from": "a", "to": "direct" },
+        { "from": "n2", "to": "direct" }
+      ],
+      "errors": [],
+      "warnings": [
+        "ambiguous-input:bare:prompt",
+        "ambiguous-input:path:prompt",
+        "ambiguous-input:by_id:prompt"
+      ],
+      "messages": {
+        "ambiguous-input:bare:prompt": "“Agent”: Task uses {{input}}, but several nodes feed into it, so {{input}} holds all their outputs — pick one with Insert"
+      }
+    },
+    {
+      "name": "connections that don't fit their handles",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "s", "type": "tool_web_search" },
+        { "id": "s2", "type": "tool_web_search" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [
+        { "id": "unknown-handle", "from": "t", "to": "a", "handle": "nope" },
+        { "id": "data-to-tools", "from": "a", "to": "out", "handle": "tools" },
+        { "id": "tool-from-out", "from": "a", "to": "s", "type": "tool_connection", "handle": "out" },
+        { "id": "data-into-tool", "from": "a", "to": "s2", "targetHandle": "tool" }
+      ],
+      "errors": [
+        "invalid-connection:unknown-handle",
+        "invalid-connection:data-to-tools",
+        "invalid-connection:tool-from-out",
+        "invalid-connection:data-into-tool"
+      ],
+      "warnings": ["unattached:s2"],
+      "messages": {
+        "invalid-connection:unknown-handle": "The connection from “Manual Trigger” to “Agent” doesn't fit their handles — delete it and connect them again"
+      }
+    },
+    {
+      "name": "null handles mean the node's first handle",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "s", "type": "tool_web_search" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [
+        { "from": "t", "to": "a", "handle": null, "targetHandle": null },
+        { "from": "a", "to": "s", "type": "tool_connection", "targetHandle": null },
+        { "from": "a", "to": "out", "handle": null }
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "a cycle without a Loop node",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "b", "type": "agent_node" }
+      ],
+      "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "b" }, { "from": "b", "to": "a" }],
+      "errors": ["cycle-without-loop:a", "cycle-without-loop:b"],
+      "warnings": ["ambiguous-input:a:prompt"],
+      "messages": {
+        "cycle-without-loop:a": "“Agent” is part of a cycle that doesn't go through a Loop node, so it would never finish"
+      }
+    },
+    {
+      "name": "a cycle through a Loop node",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "l", "type": "logic_loop" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [
+        { "from": "t", "to": "l" },
+        { "from": "l", "to": "a", "handle": "loop" },
+        { "from": "a", "to": "l" },
+        { "from": "l", "to": "out", "handle": "done" }
+      ],
+      "errors": [],
+      "warnings": []
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { CircleAlert, TriangleAlert } from "lucide-react";
+import { Check, CircleAlert, Loader2, Minus, Square, TriangleAlert, X } from "lucide-react";
 import { memo, type CSSProperties } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,8 +14,10 @@ import {
   nodeRole,
   type HandleDef,
 } from "@/lib/nodes/registry";
+import type { NodeRunStatus } from "@/lib/runs-api";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
+import { useRunStore } from "@/stores/run-store";
 
 const handleClass =
   "size-3! border-2! border-background! transition-transform hover:scale-125!";
@@ -71,6 +73,43 @@ function IssueIndicator({ issues }: { issues: FlowIssue[] }) {
   );
 }
 
+/** Outline per run status (outline, so it never fights the selection ring). */
+const RUN_OUTLINE: Partial<Record<NodeRunStatus, string>> = {
+  running: "outline-2 outline-offset-2 outline-sky-500",
+  succeeded: "outline-2 outline-offset-2 outline-emerald-500",
+  failed: "outline-2 outline-offset-2 outline-destructive",
+  cancelled: "outline-2 outline-offset-2 outline-dashed outline-muted-foreground",
+};
+
+const RUN_LABEL: Record<NodeRunStatus, string> = {
+  pending: "Waiting",
+  running: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  skipped: "Skipped",
+  cancelled: "Stopped",
+};
+
+function RunStatusBadge({ status }: { status: NodeRunStatus }) {
+  const Icon = { running: Loader2, succeeded: Check, failed: X, skipped: Minus, cancelled: Square, pending: Minus }[status];
+  return (
+    <span
+      role="img"
+      aria-label={`Run status: ${RUN_LABEL[status]}`}
+      title={RUN_LABEL[status]}
+      className={cn(
+        "absolute -top-2 -left-2 flex size-5 items-center justify-center rounded-full border bg-background shadow-sm",
+        status === "running" && "text-sky-500",
+        status === "succeeded" && "text-emerald-600 dark:text-emerald-500",
+        status === "failed" && "text-destructive",
+        (status === "skipped" || status === "cancelled" || status === "pending") && "text-muted-foreground",
+      )}
+    >
+      <Icon className={cn("size-3", status === "running" && "animate-spin")} />
+    </span>
+  );
+}
+
 function RoleBadge({ role }: { role: "start" | "end" }) {
   return (
     <span
@@ -93,6 +132,7 @@ function FlowNodeComponent({ id, type, data, selected }: NodeProps<CanvasNode>) 
   const role = nodeRole(type);
   const issues = useFlowStore((s) => s.nodeIssues[id] ?? NO_ISSUES);
   const hasError = issues.some((i) => i.severity === "error");
+  const runStatus = useRunStore((s) => s.nodes[id]?.status);
 
   const dataInputs = def.inputs.filter((h) => h.kind === "data");
   const toolInputs = def.inputs.filter((h) => h.kind === "tool");
@@ -116,9 +156,12 @@ function FlowNodeComponent({ id, type, data, selected }: NodeProps<CanvasNode>) 
         selected
           ? "border-(--node-accent) ring-2 ring-(--node-accent)/30"
           : cn("hover:shadow-md", hasError && "border-destructive/50"),
+        runStatus && RUN_OUTLINE[runStatus],
+        runStatus === "skipped" && "opacity-50",
       )}
     >
       {role !== "step" && <RoleBadge role={role} />}
+      {runStatus && <RunStatusBadge status={runStatus} />}
       {issues.length > 0 && <IssueIndicator issues={issues} />}
 
       {toolInputs.map((h) => (

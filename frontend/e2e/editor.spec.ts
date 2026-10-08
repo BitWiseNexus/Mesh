@@ -61,6 +61,22 @@ test("build a flow by dropping and connecting nodes", async ({ editor }) => {
   await expect(editor.edges).toHaveCount(4);
 });
 
+test("importing into a flow is an undoable edit that gets saved", async ({ editor, page }) => {
+  await editor.open();
+  await importFixture(editor);
+  await expect(editor.saveStatus()).not.toHaveText("Saved"); // imported content isn't on the server yet
+
+  await page.keyboard.press("Control+z");
+  await expect(editor.nodes).toHaveCount(2); // back to the starter flow
+  await page.keyboard.press("Control+Shift+z");
+  await expect(editor.nodes).toHaveCount(4);
+
+  await editor.save();
+  await page.reload();
+  await expect(editor.nodes).toHaveCount(4);
+  await expect(editor.node("Lead Parser")).toBeVisible();
+});
+
 test("configure nodes from the settings panel", async ({ editor, page }) => {
   await editor.open();
   await importFixture(editor);

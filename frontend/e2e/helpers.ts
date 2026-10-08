@@ -7,6 +7,10 @@ export { expect };
 
 export const PASSWORD = "correct-horse-1";
 export const FIXTURE = path.join(__dirname, "fixtures", "support-flow.mesh.json");
+/** Manual Trigger → Agent (mock/echo, no API key needed) → Output. */
+export const ECHO_FIXTURE = path.join(__dirname, "fixtures", "echo-flow.mesh.json");
+/** Manual Trigger → If / Else (no executor yet) → Output. */
+export const BRANCH_FIXTURE = path.join(__dirname, "fixtures", "branch-flow.mesh.json");
 
 export interface TestUser {
   name: string;
@@ -163,11 +167,11 @@ export class Editor {
   }
 }
 
-/** Imports the fixture flow into the open flow (confirming the replace dialog). */
-export async function importFixture(editor: Editor) {
-  await editor.page.locator("input[name=import-into-flow]").setInputFiles(FIXTURE);
+/** Imports a fixture flow into the open flow (confirming the replace dialog). */
+export async function importFixture(editor: Editor, file = FIXTURE, nodeCount = 4) {
+  await editor.page.locator("input[name=import-into-flow]").setInputFiles(file);
   await editor.page.getByRole("button", { name: "Replace" }).click();
-  await expect(editor.nodes).toHaveCount(4);
+  await expect(editor.nodes).toHaveCount(nodeCount);
   // Wait for the dialog (and its fading backdrop) to be gone: forced drops would land on it.
   await expect(editor.page.getByRole("alertdialog")).toHaveCount(0);
 }

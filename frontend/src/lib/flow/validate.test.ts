@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { createDefaultData } from "@/lib/nodes/registry";
-import type { NodeData, NodeType } from "@/types/flow";
+import type { EdgeType, Flow, NodeData, NodeType } from "@/types/flow";
 
-import type { CanvasEdge, CanvasNode } from "./graph";
+import { fromFlow, type CanvasEdge, type CanvasNode } from "./graph";
 import { createFlowFromTemplate } from "./templates";
 import { issuesByNode, validateFlow } from "./validate";
 
@@ -29,6 +32,77 @@ const edge = (
 });
 
 const ids = (nodes: CanvasNode[], edges: CanvasEdge[]) => validateFlow(nodes, edges).map((i) => i.id);
+
+interface SharedCase {
+  name: string;
+  nodes: { id: string; type: NodeType; ref?: string; data?: NodeData }[];
+  edges: {
+    from: string;
+    to: string;
+    type?: EdgeType;
+    handle?: string | null;
+    targetHandle?: string | null;
+    id?: string;
+  }[];
+  errors: string[];
+  warnings: string[];
+  messages?: Record<string, string>;
+}
+
+/** Shared with the backend's validation tests — both must report exactly the same issues. */
+const sharedCases = (
+  JSON.parse(
+    readFileSync(resolve(__dirname, "../../../../shared/validation-cases.json"), "utf8"),
+  ) as { cases: SharedCase[] }
+).cases;
+
+/** A shared case as the editor sees it: loaded like a saved flow (defaults filled in). */
+function loadCase(c: SharedCase) {
+  const flow: Flow = {
+    schema_version: 1,
+    flow_id: null,
+    name: c.name,
+    description: "",
+    nodes: c.nodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      ref: n.ref ?? n.id,
+      data: n.data ?? {},
+      position: { x: 0, y: 0 },
+    })),
+    edges: c.edges.map((e) => {
+      const tool = e.type === "tool_connection";
+      const sourceHandle = e.handle === undefined ? (tool ? "tools" : "out") : e.handle;
+      return {
+        id: e.id ?? `${e.from}-${sourceHandle}-${e.to}`,
+        source: e.from,
+        target: e.to,
+        type: e.type ?? "data",
+        sourceHandle,
+        targetHandle: e.targetHandle === undefined ? (tool ? "tool" : "in") : e.targetHandle,
+        animated: false,
+      };
+    }),
+  };
+  return fromFlow(flow);
+}
+
+describe("validateFlow (shared cases)", () => {
+  it.each(sharedCases)("$name", (c) => {
+    const { nodes, edges } = loadCase(c);
+    const issues = validateFlow(nodes, edges);
+    const of = (severity: string) => issues.filter((i) => i.severity === severity).map((i) => i.id);
+    expect({ errors: of("error"), warnings: of("warning") }).toEqual({
+      errors: c.errors,
+      warnings: c.warnings,
+    });
+    // Errors first: the list is exactly errors followed by warnings.
+    expect(issues.map((i) => i.id)).toEqual([...c.errors, ...c.warnings]);
+    for (const [id, message] of Object.entries(c.messages ?? {})) {
+      expect(issues.find((i) => i.id === id)?.message).toBe(message);
+    }
+  });
+});
 
 describe("validateFlow", () => {
   it("accepts the starter template", () => {

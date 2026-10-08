@@ -217,10 +217,10 @@ describe("flow store", () => {
       expect(store()).toMatchObject({ flowId: "f2", version: 7 });
     });
 
-    it("restoreLocal applies recovered content as an undoable, unsaved change", () => {
+    it("replaceContent (imports, recovered edits) is an undoable, unsaved change", () => {
       load();
       const recovered = { ...store().toFlow(), name: "Recovered", flow_id: "elsewhere" };
-      store().restoreLocal(recovered);
+      store().replaceContent(recovered);
       expect(store()).toMatchObject({ name: "Recovered", flowId: "f1", version: 1, dirty: true });
       store().undo();
       expect(store().dirty).toBe(false);

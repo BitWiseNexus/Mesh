@@ -6,20 +6,26 @@ import { toast } from "sonner";
 
 import { FlowCanvas } from "@/components/canvas/flow-canvas";
 import { useFlowStore } from "@/stores/flow-store";
+import { isRunActive, useRunStore } from "@/stores/run-store";
 
 import { ConflictBanner, RecoveryBanner } from "./editor-banners";
 import { EditorToolbar } from "./editor-toolbar";
 import { NodeConfigPanel } from "./node-config-panel";
 import { NodePalette } from "./node-palette";
+import { RunPanel } from "./run-panel";
 import { useAutosave } from "./use-autosave";
 import { useFlowSave } from "./use-flow-save";
+import { useRun, useRunLifecycle } from "./use-run";
 
 const isEditableTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-/** Ctrl+S saves (even while typing); undo/redo shortcuts are ignored while typing in a field. */
-function useEditorShortcuts(save: () => void) {
+/**
+ * Ctrl+S saves and Ctrl+Enter runs (even while typing); undo/redo shortcuts are ignored while
+ * typing in a field.
+ */
+function useEditorShortcuts(save: () => void, run: () => void) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -27,6 +33,11 @@ function useEditorShortcuts(save: () => void) {
       if (key === "s") {
         event.preventDefault(); // not the browser's "Save page" dialog
         save();
+        return;
+      }
+      if (key === "enter") {
+        event.preventDefault();
+        run();
         return;
       }
       if (isEditableTarget(event.target)) return;
@@ -41,7 +52,7 @@ function useEditorShortcuts(save: () => void) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [save]);
+  }, [save, run]);
 }
 
 function EditorLayout() {
@@ -58,17 +69,32 @@ function EditorLayout() {
     }
     if (dirty || state.status === "error") void save();
   }, [save]);
-  useEditorShortcuts(saveNow);
+  const { start, stop, follow } = useRun();
+  useRunLifecycle(follow);
+  /** Ctrl+Enter: run when the flow is valid, has one trigger and nothing is running. */
+  const runShortcut = useCallback(() => {
+    const { issues, nodes } = useFlowStore.getState();
+    const triggers = nodes.filter((n) => n.type.startsWith("trigger_"));
+    if (isRunActive(useRunStore.getState().phase)) return;
+    if (issues.some((i) => i.severity === "error")) {
+      toast.error("Fix the flow's errors before running it.");
+    } else if (triggers.length > 1) {
+      toast.info("This flow has several triggers — choose one with Run.");
+    } else {
+      void start();
+    }
+  }, [start]);
+  useEditorShortcuts(saveNow, runShortcut);
 
   const resolveRecovery = (restore: boolean) => {
-    const { pendingRecovery: recovered, restoreLocal } = useFlowStore.getState();
-    if (restore && recovered) restoreLocal(recovered);
+    const { pendingRecovery: recovered, replaceContent } = useFlowStore.getState();
+    if (restore && recovered) replaceContent(recovered);
     useFlowStore.setState({ pendingRecovery: null });
   };
 
   return (
     <div className="flex h-dvh flex-col">
-      <EditorToolbar onSave={saveNow} />
+      <EditorToolbar onSave={saveNow} onRun={(id) => void start(id)} onStop={() => void stop()} />
       <ConflictBanner
         onLoadLatest={() => void loadLatest()}
         onOverwrite={() => void save({ overwrite: true })}
@@ -76,8 +102,11 @@ function EditorLayout() {
       <RecoveryBanner recovered={pendingRecovery} onResolve={resolveRecovery} />
       <div className="flex min-h-0 flex-1">
         <NodePalette />
-        <main className="relative min-w-0 flex-1">
-          <FlowCanvas />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <FlowCanvas />
+          </div>
+          <RunPanel />
         </main>
         <NodeConfigPanel />
       </div>

@@ -104,8 +104,9 @@ type ConnectionLike = Pick<Connection, "source" | "target"> & {
 
 export type ConnectionCheck = { ok: true; type: EdgeType } | { ok: false; reason: string };
 
-function findHandle(
-  node: CanvasNode,
+/** The handle an edge end attaches to (null id = the node's single/first handle). */
+export function findHandle(
+  node: Pick<CanvasNode, "type">,
   handleId: string | null | undefined,
   side: "source" | "target",
 ): HandleDef | undefined {
