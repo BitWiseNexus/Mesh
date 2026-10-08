@@ -16,11 +16,11 @@ permissions:
 jobs:
   backend:
     name: Backend · lint + tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -41,7 +41,7 @@ jobs:
 
   frontend:
     name: Frontend · lint, types, unit tests, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -50,8 +50,8 @@ jobs:
       NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "true"
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-mesh
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -64,25 +64,25 @@ jobs:
 
   rules:
     name: Security rules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-firebase
       - run: npm ci --prefix firebase
       - run: npm run test:rules
 
   e2e:
     name: End-to-end (full stack)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       # Read at `next build` time by the production server Playwright starts in CI.
       NEXT_PUBLIC_USE_FIREBASE_EMULATORS: "true"
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-mesh
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload report and traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |

@@ -1,0 +1,11 @@
+# Keeps the GitHub Actions used by CI current (they get deprecated surprisingly fast). One grouped
+# PR per month. npm/uv dependencies aren't enabled here to avoid PR noise — add them when wanted.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
