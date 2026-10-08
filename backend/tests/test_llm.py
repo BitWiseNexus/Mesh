@@ -22,6 +22,19 @@ def collect(model: str, text: str = "one two three", **kwargs) -> list[str]:
     return chunks
 
 
+def test_litellm_leaves_the_apps_loggers_alone() -> None:
+    """Regression: LiteLLM's log filters on uvicorn/asyncio/httpx loggers broke requests while
+    LiteLLM was still being imported in the warm-up thread (CI's backend never became ready)."""
+    import logging
+
+    from litellm import _logging
+
+    assert _logging._ENABLE_SECRET_REDACTION is False
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "%s", ("GET /health",), None)
+    for name in ("uvicorn.access", "uvicorn.error", "asyncio", "httpx"):
+        assert logging.getLogger(name).filter(record)
+
+
 def chunk(content=None, tool_calls=None):
     delta = SimpleNamespace(content=content, tool_calls=tool_calls)
     return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])

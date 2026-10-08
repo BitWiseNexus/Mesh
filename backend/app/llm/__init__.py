@@ -108,6 +108,12 @@ def _load_litellm() -> ModuleType:
     global _litellm
     if _litellm is None:
         os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+        # Importing LiteLLM attaches its secret-redaction filters to *this app's* loggers
+        # (asyncio, httpx, uvicorn.error, uvicorn.access); they lazily import more of LiteLLM on
+        # every record. While the warm-up thread is still importing it, a request log in the
+        # main thread then fails inside importlib (KeyError: 'litellm') and requests break —
+        # CI's backend never answered /health. Mesh doesn't log through LiteLLM: turn them off.
+        os.environ.setdefault("LITELLM_DISABLE_REDACT_SECRETS", "true")
         import litellm
 
         litellm.suppress_debug_info = True
