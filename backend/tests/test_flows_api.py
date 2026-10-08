@@ -10,24 +10,12 @@ from fastapi.testclient import TestClient
 from app.core.auth import AuthUser, get_current_user
 from app.core.firebase import get_db
 from app.main import app
+from tests.conftest import FIRESTORE_EMULATOR, requires_firestore_emulator
 
-FIRESTORE_EMULATOR = "http://127.0.0.1:8080"
 CLEAR_URL = f"{FIRESTORE_EMULATOR}/emulator/v1/projects/demo-mesh/databases/(default)/documents"
 
 
-def _firestore_up() -> bool:
-    try:
-        urllib.request.urlopen(FIRESTORE_EMULATOR, timeout=0.5)
-    except urllib.error.HTTPError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
-pytestmark = pytest.mark.skipif(
-    not _firestore_up(), reason="Firestore emulator not running (firebase emulators:start)"
-)
+pytestmark = requires_firestore_emulator
 
 SPEC_FLOW = {
     "name": "Support Lead AI Assistant",

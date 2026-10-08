@@ -1,15 +1,17 @@
 import json
+import os
 import urllib.error
 import urllib.request
 
 import pytest
 
 AUTH_EMULATOR = "http://127.0.0.1:9099"
+FIRESTORE_EMULATOR = "http://127.0.0.1:8080"
 
 
-def _emulator_up() -> bool:
+def _reachable(url: str) -> bool:
     try:
-        urllib.request.urlopen(AUTH_EMULATOR, timeout=0.5)
+        urllib.request.urlopen(url, timeout=0.5)
     except urllib.error.HTTPError:
         return True  # it answered
     except OSError:
@@ -17,9 +19,17 @@ def _emulator_up() -> bool:
     return True
 
 
-requires_auth_emulator = pytest.mark.skipif(
-    not _emulator_up(), reason="Firebase Auth emulator not running (firebase emulators:start)"
-)
+def requires_emulator(url: str, name: str) -> pytest.MarkDecorator:
+    """Skips tests when the emulator isn't running — locally. With REQUIRE_EMULATORS=1 (CI) the
+    tests run anyway and fail loudly, so a broken CI setup can't pass by skipping everything."""
+    skip = not _reachable(url) and not os.environ.get("REQUIRE_EMULATORS")
+    return pytest.mark.skipif(
+        skip, reason=f"{name} emulator not running (firebase emulators:start)"
+    )
+
+
+requires_auth_emulator = requires_emulator(AUTH_EMULATOR, "Firebase Auth")
+requires_firestore_emulator = requires_emulator(FIRESTORE_EMULATOR, "Firestore")
 
 
 def emulator_sign_up(email: str, password: str = "secret123") -> str:

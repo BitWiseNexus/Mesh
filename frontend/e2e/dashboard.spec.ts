@@ -1,4 +1,4 @@
-import { expect, FIXTURE, openDashboard, test } from "./helpers";
+import { Editor, expect, FIXTURE, openDashboard, test } from "./helpers";
 
 const card = (page: import("@playwright/test").Page, name: string) =>
   page.getByRole("article", { name, exact: true });
@@ -70,22 +70,44 @@ test("saving over a newer version from another tab is caught", async ({ editor, 
 
   // Tab 2 opens the same flow and saves a change first.
   const other = await context.newPage();
+  const otherEditor = new Editor(other);
   await other.goto(url);
-  await other.getByLabel("Flow name").fill("Saved in tab 2");
-  await other.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(other.getByText("Saved", { exact: true })).toBeVisible();
+  await other.getByRole("textbox", { name: "Flow name" }).fill("Saved in tab 2");
+  await otherEditor.save();
 
-  // Tab 1 is still on the old version. The browser logs the expected 409 as a console error.
+  // Tab 1 is still on the old version; its autosave hits the conflict (the browser logs the
+  // expected 409 as a console error).
   page.removeAllListeners("console");
   await editor.toolbar.getByLabel("Flow name").fill("Saved in tab 1");
-  await editor.toolbar.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("This flow was changed in another tab or device.")).toBeVisible();
+  const banner = page.getByRole("alert", { name: "Save conflict" });
+  await expect(banner).toContainText("This flow was changed in another tab or device.");
+  await expect(editor.saveStatus()).toHaveText("Not saved — conflict");
 
-  await page.getByRole("button", { name: "Reload" }).click();
+  // "Load latest" discards tab 1's edit…
+  await banner.getByRole("button", { name: "Load latest" }).click();
   await expect(editor.toolbar.getByLabel("Flow name")).toHaveValue("Saved in tab 2");
-  // After reloading, saving works again.
+  await expect(banner).toBeHidden();
+
+  // …and after that, saving works normally again.
   await editor.toolbar.getByLabel("Flow name").fill("Merged by hand");
   await editor.save();
+});
+
+test("a conflict can be resolved by overwriting with your version", async ({ editor, page, context }) => {
+  await editor.open();
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await other.getByRole("textbox", { name: "Flow name" }).fill("Theirs");
+  await new Editor(other).save();
+
+  page.removeAllListeners("console");
+  await editor.toolbar.getByLabel("Flow name").fill("Mine");
+  const banner = page.getByRole("alert", { name: "Save conflict" });
+  await banner.getByRole("button", { name: "Overwrite with mine" }).click();
+  await expect(editor.saveStatus()).toHaveText("Saved");
+
+  await other.reload();
+  await expect(other.getByRole("textbox", { name: "Flow name" })).toHaveValue("Mine");
 });
 
 test("offers to import a flow drafted in this browser before the dashboard existed", async ({

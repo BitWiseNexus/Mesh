@@ -6,6 +6,7 @@ import {
   findLegacyDraft,
   flushDraft,
   parseStoredDraft,
+  readDraftBackup,
   useFlowStore,
 } from "./flow-store";
 
@@ -159,9 +160,71 @@ describe("flow store", () => {
     const flow = { ...store().toFlow(), flow_id: "f1", version: 4 };
     store().loadFlow(flow);
     expect(store().version).toBe(4);
-    store().markSaved(5);
+    store().markSaved("f1", 5, store().fingerprint);
     expect(store().version).toBe(5);
     expect(store().toFlow()).not.toHaveProperty("version");
+  });
+
+  describe("unsaved changes", () => {
+    const load = () => {
+      store().newFlow("starter");
+      store().loadFlow({ ...store().toFlow(), flow_id: "f1", version: 1 });
+    };
+
+    it("is clean after loading, dirty after an edit, clean again after undoing it", () => {
+      load();
+      expect(store().dirty).toBe(false);
+      store().addNode("agent_node", { x: 0, y: 0 });
+      expect(store().dirty).toBe(true);
+      store().undo();
+      expect(store().dirty).toBe(false);
+    });
+
+    it("counts renames and node moves, but not selection", () => {
+      load();
+      const id = store().nodes[0].id;
+      store().selectNode(id);
+      expect(store().dirty).toBe(false);
+      store().setMeta({ name: "Renamed" });
+      expect(store().dirty).toBe(true);
+      store().setMeta({ name: "Untitled flow" });
+      expect(store().dirty).toBe(false);
+      store().onNodesChange([{ type: "position", id, position: { x: 99, y: 0 } }]);
+      expect(store().dirty).toBe(true);
+    });
+
+    it("markSaved clears dirty for the saved content only", () => {
+      load();
+      store().setMeta({ name: "A" });
+      const savedFingerprint = store().fingerprint;
+      store().setMeta({ name: "AB" }); // edited while the save was in flight
+      store().markSaved("f1", 2, savedFingerprint);
+      expect(store().version).toBe(2);
+      expect(store().save).toMatchObject({ status: "idle", failures: 0 });
+      expect(store().save.lastSavedAt).not.toBeNull();
+      expect(store().dirty).toBe(true); // "AB" isn't saved yet
+
+      store().markSaved("f1", 3, store().fingerprint);
+      expect(store().dirty).toBe(false);
+    });
+
+    it("ignores saves that finish after another flow was opened", () => {
+      load();
+      store().setMeta({ name: "A" });
+      const fingerprint = store().fingerprint;
+      store().loadFlow({ ...store().toFlow(), flow_id: "f2", version: 7 });
+      store().markSaved("f1", 2, fingerprint);
+      expect(store()).toMatchObject({ flowId: "f2", version: 7 });
+    });
+
+    it("restoreLocal applies recovered content as an undoable, unsaved change", () => {
+      load();
+      const recovered = { ...store().toFlow(), name: "Recovered", flow_id: "elsewhere" };
+      store().restoreLocal(recovered);
+      expect(store()).toMatchObject({ name: "Recovered", flowId: "f1", version: 1, dirty: true });
+      store().undo();
+      expect(store().dirty).toBe(false);
+    });
   });
 
   describe("local draft backup", () => {
@@ -174,10 +237,23 @@ describe("flow store", () => {
       expect(localStorage.getItem(draftKeyFor("alice", "flow_a"))).toBeNull(); // debounced
       flushDraft();
       const saved = read(draftKeyFor("alice", "flow_a"));
-      expect(saved.version).toBe(2);
+      expect(saved.version).toBe(3);
       expect(saved.state.flow.nodes).toHaveLength(1);
       expect(saved.state.flow.nodes[0]).not.toHaveProperty("selected");
       expect(saved.state).not.toHaveProperty("past");
+    });
+
+    it("records the server version the backup is based on", () => {
+      localStorage.clear();
+      bindDraft("alice", "f9");
+      store().loadFlow({ ...store().toFlow(), flow_id: "f9", version: 4 });
+      store().setMeta({ name: "Offline edit" });
+      flushDraft();
+      expect(readDraftBackup("alice", "f9")).toMatchObject({
+        baseVersion: 4,
+        flow: { name: "Offline edit" },
+      });
+      expect(readDraftBackup("alice", "missing")).toBeNull();
     });
 
     it("finishes the previous flow's pending write under its own key when switching", () => {

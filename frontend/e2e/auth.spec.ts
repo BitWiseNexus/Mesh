@@ -84,10 +84,16 @@ test("Google sign-in (Auth emulator popup)", async ({ page }) => {
   await page.getByRole("button", { name: "Continue with Google" }).click();
   const popup = await popupPromise;
 
-  // The emulator's fake Google account chooser.
-  await popup.getByRole("button", { name: /add new account/i }).click();
-  await popup.getByLabel(/email/i).fill(newUser().email);
-  await popup.getByLabel(/display name/i).fill("Katherine Johnson");
+  // The emulator's fake Google account chooser. A click on "Add new account" can land before the
+  // popup's script is ready and do nothing, so retry until its (visible) form shows up.
+  await popup.waitForLoadState("load");
+  const email = popup.getByLabel(/email/i).filter({ visible: true });
+  await expect(async () => {
+    await popup.getByRole("button", { name: /add new account/i }).click({ timeout: 2000 });
+    await expect(email).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+  await email.fill(newUser().email);
+  await popup.getByLabel(/display name/i).filter({ visible: true }).fill("Katherine Johnson");
   await popup.getByRole("button", { name: /sign in with google/i }).click();
 
   await expect(page).toHaveURL(/\/flows$/);

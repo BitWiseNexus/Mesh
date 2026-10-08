@@ -122,7 +122,7 @@ test("missing trigger: one-click fix, and deletes undo as one step", async ({ ed
   await editor.readyToRun();
 });
 
-test("saved changes are on the server: they survive a reload (Save button and Ctrl+S)", async ({
+test("saved changes are on the server: they survive a reload (Ctrl+S)", async ({
   editor,
   page,
 }) => {
@@ -133,8 +133,7 @@ test("saved changes are on the server: they survive a reload (Save button and Ct
 
   await editor.drop("Web Search", 420, 700);
   await editor.settings.getByLabel("Max results").fill("7");
-  await page.keyboard.press("Control+s"); // works while typing in a field
-  await expect(page.getByText("Saved", { exact: true }).first()).toBeVisible();
+  await editor.save(); // Ctrl+S works while typing in a field
 
   await page.reload();
   await expect(editor.nodes).toHaveCount(4);

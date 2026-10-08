@@ -21,6 +21,7 @@ import {
   type CanvasNode,
   type ConnectionCheck,
 } from "@/lib/flow/graph";
+import { contentFingerprint } from "@/lib/flow/fingerprint";
 import { createFlowFromTemplate, type FlowTemplate } from "@/lib/flow/templates";
 import { issuesByNode, validateFlow, type FlowIssue } from "@/lib/flow/validate";
 import { createDefaultData } from "@/lib/nodes/registry";
@@ -30,14 +31,19 @@ const HISTORY_LIMIT = 100;
 /** Edits with the same coalesce key within this window become one undo step. */
 const COALESCE_MS = 1000;
 
-type Snapshot = { nodes: CanvasNode[]; edges: CanvasEdge[] };
+type Snapshot = { nodes: CanvasNode[]; edges: CanvasEdge[]; name: string; description: string };
 
-/** What the autosaved draft holds (persist version 2). */
-type PersistedDraft = { flow: Flow };
+/**
+ * What the local backup holds (persist version 3): the flow's content and the server version it
+ * was based on, so a restore can tell "unsaved edits on top of the latest save" from "edits made on
+ * an older version that has since changed elsewhere".
+ */
+type PersistedDraft = { flow: Flow; baseVersion?: number | null };
 
 /**
  * Local backup of the open flow, per user *and* flow, written continuously (debounced). The server
- * is the source of truth; the backup is for recovering unsaved edits (restore lands with autosave).
+ * is the source of truth; the backup lets the editor recover edits that never reached it (crash,
+ * closed tab, failed save). See `readDraftBackup`.
  */
 export const draftKeyFor = (uid: string, flowId: string) => `mesh:flow-draft:${uid}:${flowId}`;
 const UNBOUND_DRAFT_KEY = "mesh:flow-draft:unbound";
@@ -50,6 +56,22 @@ export const flushDraft = () => draftStorage.flush();
 export function bindDraft(uid: string, flowId: string): void {
   flushDraft();
   useFlowStore.persist.setOptions({ name: draftKeyFor(uid, flowId) });
+}
+
+/** The local backup of `flowId` for `uid`, if it holds a valid flow. Call after `bindDraft`. */
+export function readDraftBackup(
+  uid: string,
+  flowId: string,
+): { flow: Flow; baseVersion: number | null } | null {
+  try {
+    const raw = localStorage.getItem(draftKeyFor(uid, flowId));
+    if (!raw) return null;
+    const { state } = JSON.parse(raw) as { state?: PersistedDraft };
+    const flow = parseStoredDraft(raw);
+    return flow ? { flow, baseVersion: state?.baseVersion ?? null } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -136,6 +158,27 @@ function restoreDraft(persisted: unknown): Flow | null {
   return result.flow;
 }
 
+export type SaveStatus = "idle" | "saving" | "error" | "conflict";
+
+export interface SaveState {
+  status: SaveStatus;
+  /** User-facing message for `error`. */
+  error: string | null;
+  /** Whether an `error` is worth retrying automatically (network/5xx yes, validation no). */
+  retryable: boolean;
+  /** Consecutive failed attempts, for retry backoff. */
+  failures: number;
+  lastSavedAt: number | null;
+}
+
+const INITIAL_SAVE: SaveState = {
+  status: "idle",
+  error: null,
+  retryable: true,
+  failures: 0,
+  lastSavedAt: null,
+};
+
 interface FlowState {
   flowId: string | null;
   /** Server version this state is based on (null for flows not loaded from the server). */
@@ -149,6 +192,16 @@ interface FlowState {
   /** Derived from nodes/edges by `validateFlow`; kept in sync by a store subscription below. */
   issues: FlowIssue[];
   nodeIssues: Record<string, FlowIssue[]>;
+
+  /** `contentFingerprint` of the current content (kept in sync by a subscription below). */
+  fingerprint: string;
+  /** Fingerprint of the content last loaded from / saved to the server. */
+  savedFingerprint: string;
+  /** Current content differs from what the server has. */
+  dirty: boolean;
+  save: SaveState;
+  /** Unsaved local edits awaiting the user's decision (see RecoveryBanner). */
+  pendingRecovery: Flow | null;
 
   past: Snapshot[];
   future: Snapshot[];
@@ -167,9 +220,16 @@ interface FlowState {
   setMeta: (meta: Partial<{ name: string; description: string }>) => void;
 
   // Whole-flow operations
+  /** Loads a flow as the saved (clean) state. */
   loadFlow: (flow: Flow & { version?: number }) => void;
-  /** Records a successful server save. */
-  markSaved: (version: number) => void;
+  /** Replaces the content with a locally recovered version (undoable), keeping id + version. */
+  restoreLocal: (flow: Flow) => void;
+  /**
+   * Records a successful save of content with `fingerprint`. Ignored if another flow has been
+   * opened meanwhile (saves can finish after the user navigated away).
+   */
+  markSaved: (flowId: string, version: number, fingerprint: string) => void;
+  setSave: (patch: Partial<SaveState>) => void;
   newFlow: (template?: FlowTemplate) => void;
   toFlow: () => Flow;
 
@@ -189,7 +249,13 @@ const RESET = {
 function stateFromFlow(flow: Flow & { version?: number }) {
   const { nodes, edges } = fromFlow(flow);
   const issues = validateFlow(nodes, edges);
+  const fingerprint = contentFingerprint(flow);
   return {
+    fingerprint,
+    savedFingerprint: fingerprint,
+    dirty: false,
+    save: INITIAL_SAVE,
+    pendingRecovery: null,
     ...RESET,
     flowId: flow.flow_id,
     version: flow.version ?? null,
@@ -281,11 +347,30 @@ export const useFlowStore = create<FlowState>()(
         });
       },
 
-      setMeta: (meta) => set(meta),
+      setMeta: (meta) => {
+        get().snapshot(`meta:${Object.keys(meta).sort().join(",")}`);
+        set(meta);
+      },
 
       loadFlow: (flow) => set(stateFromFlow(flow)),
 
-      markSaved: (version) => set({ version }),
+      restoreLocal: (flow) => {
+        get().snapshot(); // Ctrl+Z goes back to the server version
+        const { nodes, edges } = fromFlow(flow);
+        set({ name: flow.name, description: flow.description, nodes, edges, selectedNodeId: null });
+      },
+
+      markSaved: (flowId, version, fingerprint) => {
+        if (get().flowId !== flowId) return;
+        set({
+          version,
+          savedFingerprint: fingerprint,
+          dirty: get().fingerprint !== fingerprint,
+          save: { ...INITIAL_SAVE, lastSavedAt: Date.now() },
+        });
+      },
+
+      setSave: (patch) => set({ save: { ...get().save, ...patch } }),
 
       newFlow: (template = "starter") => set(stateFromFlow(createFlowFromTemplate(template))),
 
@@ -295,39 +380,39 @@ export const useFlowStore = create<FlowState>()(
       },
 
       snapshot: (coalesceKey) => {
-        const { nodes, edges, past, lastSnapshot } = get();
+        const { nodes, edges, name, description, past, lastSnapshot } = get();
         const now = Date.now();
         if (coalesceKey && coalesceKey === lastSnapshot.key && now - lastSnapshot.at < COALESCE_MS) {
           set({ lastSnapshot: { key: coalesceKey, at: now } });
           return;
         }
         set({
-          past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT),
+          past: [...past, { nodes, edges, name, description }].slice(-HISTORY_LIMIT),
           future: [],
           lastSnapshot: { key: coalesceKey ?? null, at: now },
         });
       },
 
       undo: () => {
-        const { past, future, nodes, edges } = get();
+        const { past, future, nodes, edges, name, description } = get();
         const previous = past.at(-1);
         if (!previous) return;
         set({
           ...previous,
           past: past.slice(0, -1),
-          future: [{ nodes, edges }, ...future],
+          future: [{ nodes, edges, name, description }, ...future],
           selectedNodeId: selectedIdOf(previous.nodes),
           lastSnapshot: { key: null, at: 0 },
         });
       },
 
       redo: () => {
-        const { past, future, nodes, edges } = get();
+        const { past, future, nodes, edges, name, description } = get();
         const next = future[0];
         if (!next) return;
         set({
           ...next,
-          past: [...past, { nodes, edges }],
+          past: [...past, { nodes, edges, name, description }],
           future: future.slice(1),
           selectedNodeId: selectedIdOf(next.nodes),
           lastSnapshot: { key: null, at: 0 },
@@ -336,11 +421,12 @@ export const useFlowStore = create<FlowState>()(
     }),
     {
       name: UNBOUND_DRAFT_KEY, // replaced by bindDraft(uid, flowId) when a flow is opened
-      version: 2,
+      version: 3,
       storage: draftStorage,
       // Hydrated explicitly on the client (see FlowEditor) to avoid SSR mismatches.
       skipHydration: true,
-      partialize: (state): PersistedDraft => ({ flow: state.toFlow() }),
+      partialize: (state): PersistedDraft => ({ flow: state.toFlow(), baseVersion: state.version }),
+      // v1: flat fields; v2: { flow } without baseVersion (treated as unknown).
       migrate: (persisted, version) =>
         version < 2 ? migrateV1(persisted) : (persisted as PersistedDraft),
       // Called on every rehydrate, with `undefined` when the user has no draft yet. Never keep the
@@ -360,6 +446,23 @@ useFlowStore.subscribe((state, prev) => {
   const issues = validateFlow(state.nodes, state.edges);
   if (JSON.stringify(issues) !== JSON.stringify(state.issues)) {
     useFlowStore.setState({ issues, nodeIssues: issuesByNode(issues) });
+  }
+});
+
+// Track unsaved changes by fingerprinting the content. Selecting or measuring nodes also replaces
+// node objects, so recompute on any change but only write when the fingerprint actually differs.
+useFlowStore.subscribe((state, prev) => {
+  if (
+    state.nodes === prev.nodes &&
+    state.edges === prev.edges &&
+    state.name === prev.name &&
+    state.description === prev.description
+  ) {
+    return;
+  }
+  const fingerprint = contentFingerprint(state.toFlow());
+  if (fingerprint !== state.fingerprint) {
+    useFlowStore.setState({ fingerprint, dirty: fingerprint !== state.savedFingerprint });
   }
 });
 

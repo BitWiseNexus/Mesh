@@ -1,0 +1,15 @@
+{
+  "name": "mesh-firebase-rules-tests",
+  "private": true,
+  "description": "Security rules tests for Firestore and Storage. `npm test` starts dedicated emulators (ports 8180/9299, separate from the dev stack) and runs them.",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run-rules-tests.mjs",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "vitest": "^5.0.3"
+  }
+}

@@ -4,12 +4,14 @@ import { FileQuestion, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
+import { decideRecovery } from "@/lib/flow/recovery";
 import { useFlow } from "@/lib/flows-queries";
-import { bindDraft, useFlowStore } from "@/stores/flow-store";
+import { bindDraft, readDraftBackup, useFlowStore } from "@/stores/flow-store";
 
 import { FlowEditor } from "./flow-editor";
 
@@ -45,9 +47,28 @@ export function FlowEditorRoute() {
   // Load into the store when this route's flow isn't the one in it (first open, or coming back
   // after editing another flow). Don't reload on refetches: that would discard local edits.
   useEffect(() => {
-    if (!query.data || !user || useFlowStore.getState().flowId === flowId) return;
+    const server = query.data;
+    if (!server || !user || useFlowStore.getState().flowId === flowId) return;
     bindDraft(user.uid, flowId);
-    useFlowStore.getState().loadFlow(query.data);
+    // Read the local backup before loadFlow, whose (debounced) persist write replaces it.
+    const decision = decideRecovery(server, readDraftBackup(user.uid, flowId));
+    const store = useFlowStore.getState();
+    store.loadFlow(server);
+    if (decision.kind === "restore") {
+      store.restoreLocal(decision.flow); // dirty → autosave pushes it
+      toast("Restored unsaved changes from your last session", {
+        action: {
+          label: "Discard",
+          onClick: () => {
+            if (useFlowStore.getState().flowId === server.flow_id) {
+              useFlowStore.getState().loadFlow(server);
+            }
+          },
+        },
+      });
+    } else if (decision.kind === "ask") {
+      useFlowStore.setState({ pendingRecovery: decision.flow });
+    }
   }, [query.data, flowId, user]);
 
   // A hidden (preserved) editor page sees the *current* URL's params, so it would mount a second,

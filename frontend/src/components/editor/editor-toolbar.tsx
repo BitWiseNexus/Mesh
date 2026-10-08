@@ -1,9 +1,10 @@
 "use client";
 
-import { Download, Loader2, Play, Redo2, Save, Undo2, Upload, Waypoints } from "lucide-react";
+import { Download, Play, Redo2, Undo2, Upload, Waypoints } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import Link from "next/link";
-import { useRef, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, type ChangeEvent, type MouseEvent } from "react";
 import { toast } from "sonner";
 
 import { UserMenu } from "@/components/auth/user-menu";
@@ -17,11 +18,12 @@ import { parseFlowJson } from "@/lib/flow/graph";
 import { canRedo, canUndo, useFlowStore } from "@/stores/flow-store";
 
 import { FlowIssuesMenu } from "./flow-issues-menu";
+import { SaveStatus } from "./save-status";
 
 const slugify = (name: string) =>
   name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flow";
 
-export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSaving: boolean }) {
+export function EditorToolbar({ onSave }: { onSave: () => void }) {
   const name = useFlowStore((s) => s.name);
   const setMeta = useFlowStore((s) => s.setMeta);
   const undo = useFlowStore((s) => s.undo);
@@ -32,6 +34,28 @@ export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSavi
   const fileInput = useRef<HTMLInputElement>(null);
   const { fitView } = useReactFlow();
   const [confirm, confirmDialog] = useConfirm();
+  const router = useRouter();
+
+  /**
+   * Leaving normally just works: autosave flushes pending edits on the way out. But if saving is
+   * currently failing or in conflict, those edits would be lost — ask first.
+   */
+  const guardLeave = async (event: MouseEvent<HTMLAnchorElement>) => {
+    const { dirty, save } = useFlowStore.getState();
+    if (!dirty || (save.status !== "error" && save.status !== "conflict")) return;
+    event.preventDefault();
+    const href = event.currentTarget.getAttribute("href") ?? "/flows";
+    const leave = await confirm({
+      title: "Leave without saving?",
+      description:
+        save.status === "conflict"
+          ? "Your latest edits conflict with a newer version and haven't been saved."
+          : `Your latest edits couldn't be saved${save.error ? ` (${save.error})` : ""}.`,
+      confirmLabel: "Leave without saving",
+      destructive: true,
+    });
+    if (leave) router.push(href);
+  };
 
   const exportFlow = () => {
     const flow = useFlowStore.getState().toFlow();
@@ -77,6 +101,7 @@ export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSavi
       {confirmDialog}
       <Link
         href="/flows"
+        onClick={guardLeave}
         className="flex items-center gap-1.5 font-semibold tracking-tight"
         aria-label="Mesh — all flows"
       >
@@ -85,7 +110,11 @@ export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSavi
       </Link>
       <Separator orientation="vertical" className="mx-1 h-5" />
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
-        <Link href="/flows" className="text-muted-foreground hover:text-foreground">
+        <Link
+          href="/flows"
+          onClick={guardLeave}
+          className="text-muted-foreground hover:text-foreground"
+        >
           Flows
         </Link>
         <span className="text-muted-foreground">/</span>
@@ -100,6 +129,8 @@ export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSavi
       </nav>
 
       <div className="ml-auto flex items-center gap-1">
+        <SaveStatus onSave={onSave} />
+        <Separator orientation="vertical" className="mx-1 h-5" />
         <FlowIssuesMenu />
         <Separator orientation="vertical" className="mx-1 h-5" />
         <Hint label="Undo (Ctrl+Z)">
@@ -138,12 +169,6 @@ export function EditorToolbar({ onSave, isSaving }: { onSave: () => void; isSavi
         />
         <ThemeToggle />
         <Separator orientation="vertical" className="mx-1 h-5" />
-        <Hint label="Save (Ctrl+S)">
-          <Button variant="outline" size="sm" onClick={onSave} disabled={isSaving}>
-            {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-            {isSaving ? "Saving…" : "Save"}
-          </Button>
-        </Hint>
         <Hint label="Running flows arrives in Phase 3">
           {/* span wrapper: disabled buttons don't emit the pointer events tooltips need */}
           <span tabIndex={0}>

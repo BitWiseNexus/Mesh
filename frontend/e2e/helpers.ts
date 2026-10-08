@@ -89,9 +89,19 @@ export class Editor {
     return new URL(this.page.url()).pathname.split("/").at(-1)!;
   }
 
+  /** The toolbar's save-status region ("Saved", "Unsaved changes", "Saving…", …). */
+  saveStatus() {
+    return this.page.getByRole("status", { name: "Save status" });
+  }
+
+  /**
+   * Saves now (Ctrl+S skips autosave's idle delay) and waits until everything is saved. React
+   * applies discrete-event updates synchronously, so right after an edit the status already shows
+   * "Unsaved changes" and can't pass this check early.
+   */
   async save() {
-    await this.toolbar.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(this.page.getByText("Saved", { exact: true })).toBeVisible();
+    await this.page.keyboard.press("Control+s");
+    await expect(this.saveStatus()).toHaveText("Saved");
   }
 
   node(text: string | RegExp) {

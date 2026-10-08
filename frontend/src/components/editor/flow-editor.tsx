@@ -1,14 +1,17 @@
 "use client";
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
+import { toast } from "sonner";
 
 import { FlowCanvas } from "@/components/canvas/flow-canvas";
 import { useFlowStore } from "@/stores/flow-store";
 
+import { ConflictBanner, RecoveryBanner } from "./editor-banners";
 import { EditorToolbar } from "./editor-toolbar";
 import { NodeConfigPanel } from "./node-config-panel";
 import { NodePalette } from "./node-palette";
+import { useAutosave } from "./use-autosave";
 import { useFlowSave } from "./use-flow-save";
 
 const isEditableTarget = (target: EventTarget | null) =>
@@ -42,12 +45,35 @@ function useEditorShortcuts(save: () => void) {
 }
 
 function EditorLayout() {
-  const { save, isSaving } = useFlowSave();
-  useEditorShortcuts(save);
+  const { save, loadLatest } = useFlowSave();
+  useAutosave(save);
+  const pendingRecovery = useFlowStore((s) => s.pendingRecovery);
+
+  /** Ctrl+S / clicking the save status: save now instead of waiting for autosave. */
+  const saveNow = useCallback(() => {
+    const { dirty, save: state } = useFlowStore.getState();
+    if (state.status === "conflict") {
+      toast.info("Resolve the conflict first: load the latest version or overwrite it.");
+      return;
+    }
+    if (dirty || state.status === "error") void save();
+  }, [save]);
+  useEditorShortcuts(saveNow);
+
+  const resolveRecovery = (restore: boolean) => {
+    const { pendingRecovery: recovered, restoreLocal } = useFlowStore.getState();
+    if (restore && recovered) restoreLocal(recovered);
+    useFlowStore.setState({ pendingRecovery: null });
+  };
 
   return (
     <div className="flex h-dvh flex-col">
-      <EditorToolbar onSave={() => void save()} isSaving={isSaving} />
+      <EditorToolbar onSave={saveNow} />
+      <ConflictBanner
+        onLoadLatest={() => void loadLatest()}
+        onOverwrite={() => void save({ overwrite: true })}
+      />
+      <RecoveryBanner recovered={pendingRecovery} onResolve={resolveRecovery} />
       <div className="flex min-h-0 flex-1">
         <NodePalette />
         <main className="relative min-w-0 flex-1">
