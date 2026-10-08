@@ -16,6 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.node_types import NodeType
 
+MAX_NODES = 500
+MAX_EDGES = 2000
+
 
 class EdgeType(StrEnum):
     DATA = "data"  # execution flow: source output feeds target
@@ -63,8 +66,8 @@ class Flow(BaseModel):
     flow_id: str | None = None  # assigned by the backend on first save
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
-    nodes: list[Node] = Field(default_factory=list)
-    edges: list[Edge] = Field(default_factory=list)
+    nodes: list[Node] = Field(default_factory=list, max_length=MAX_NODES)
+    edges: list[Edge] = Field(default_factory=list, max_length=MAX_EDGES)
 
     @model_validator(mode="after")
     def _check_integrity(self) -> Self:

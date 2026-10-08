@@ -78,7 +78,7 @@ export function FlowCanvas() {
     (event: DragEvent) => {
       event.preventDefault();
       const type = event.dataTransfer.getData(DRAG_MIME) as NodeType;
-      if (!NODE_TYPES.includes(type)) return;
+      if (!NODE_TYPES.includes(type) || NODE_REGISTRY[type].comingSoon) return;
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       // Center the node on the cursor (nodes are w-60 ≈ 240px wide, ~60px tall).
       addNode(type, { x: position.x - 120, y: position.y - 30 });

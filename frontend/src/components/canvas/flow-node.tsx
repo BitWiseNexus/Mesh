@@ -1,11 +1,21 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { CircleAlert, TriangleAlert } from "lucide-react";
 import { memo, type CSSProperties } from "react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CanvasNode } from "@/lib/flow/graph";
-import { CATEGORIES, NODE_REGISTRY, nodeDisplayName, type HandleDef } from "@/lib/nodes/registry";
+import type { FlowIssue } from "@/lib/flow/validate";
+import {
+  CATEGORIES,
+  NODE_REGISTRY,
+  nodeDisplayName,
+  nodeRole,
+  type HandleDef,
+} from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
+import { useFlowStore } from "@/stores/flow-store";
 
 const handleClass =
   "size-3! border-2! border-background! transition-transform hover:scale-125!";
@@ -32,12 +42,57 @@ function ToolHandle({ def, type }: { def: HandleDef; type: "source" | "target" }
   );
 }
 
-function FlowNodeComponent({ type, data, selected }: NodeProps<CanvasNode>) {
+const NO_ISSUES: FlowIssue[] = [];
+
+function IssueIndicator({ issues }: { issues: FlowIssue[] }) {
+  const hasError = issues.some((i) => i.severity === "error");
+  const Icon = hasError ? CircleAlert : TriangleAlert;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            aria-label={`${issues.length} issue${issues.length === 1 ? "" : "s"}`}
+            className={cn(
+              "absolute -top-2 -right-2 flex size-5 items-center justify-center rounded-full border bg-background shadow-sm",
+              hasError ? "text-destructive" : "text-amber-500",
+            )}
+          />
+        }
+      >
+        <Icon className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="flex-col items-start">
+        {issues.map((i) => (
+          <span key={i.id}>{i.message}</span>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function RoleBadge({ role }: { role: "start" | "end" }) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute -top-2.5 rounded-full bg-(--node-accent) px-1.5 py-0.5 text-[9px] leading-none font-semibold tracking-wider text-white uppercase",
+        role === "start" ? "left-5" : "right-5",
+      )}
+    >
+      {role}
+    </span>
+  );
+}
+
+function FlowNodeComponent({ id, type, data, selected }: NodeProps<CanvasNode>) {
   const def = NODE_REGISTRY[type];
   const category = CATEGORIES[def.category];
   const Icon = def.icon;
   const name = nodeDisplayName(type, data);
   const summary = def.summary?.(data);
+  const role = nodeRole(type);
+  const issues = useFlowStore((s) => s.nodeIssues[id] ?? NO_ISSUES);
+  const hasError = issues.some((i) => i.severity === "error");
 
   const dataInputs = def.inputs.filter((h) => h.kind === "data");
   const toolInputs = def.inputs.filter((h) => h.kind === "tool");
@@ -55,11 +110,17 @@ function FlowNodeComponent({ type, data, selected }: NodeProps<CanvasNode>) {
       }
       className={cn(
         "relative w-60 rounded-xl border bg-card text-card-foreground shadow-sm transition-shadow",
+        // Start/end nodes get a rounded outer edge so a flow's entry and exit read at a glance.
+        role === "start" && "rounded-l-[30px] pl-1.5",
+        role === "end" && "rounded-r-[30px] pr-1.5",
         selected
           ? "border-(--node-accent) ring-2 ring-(--node-accent)/30"
-          : "hover:shadow-md",
+          : cn("hover:shadow-md", hasError && "border-destructive/50"),
       )}
     >
+      {role !== "step" && <RoleBadge role={role} />}
+      {issues.length > 0 && <IssueIndicator issues={issues} />}
+
       {toolInputs.map((h) => (
         <ToolHandle key={h.id} def={h} type="target" />
       ))}
@@ -96,8 +157,8 @@ function FlowNodeComponent({ type, data, selected }: NodeProps<CanvasNode>) {
 
       {toolOutputs.map((h) => (
         <div key={h.id}>
-          {/* beside the handle so the label never sits on the tool edge */}
-          <span className="pointer-events-none absolute bottom-0 left-1/2 ml-2.5 translate-y-1/2 text-[10px] leading-none font-medium text-(--tool-accent)">
+          {/* Below the border and beside the handle: never crossed by the border, ring or tool edge. */}
+          <span className="pointer-events-none absolute top-full left-1/2 mt-1 ml-2.5 text-[10px] leading-none font-medium text-(--tool-accent)">
             {h.label}
           </span>
           <ToolHandle def={h} type="source" />

@@ -8,12 +8,14 @@ import { DRAG_MIME } from "@/components/canvas/flow-canvas";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NODES_BY_CATEGORY, type NodeDefinition } from "@/lib/nodes/registry";
+import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
 function PaletteItem({ def, color }: { def: NodeDefinition; color: string }) {
   const addNode = useFlowStore((s) => s.addNode);
   const { screenToFlowPosition } = useReactFlow();
   const Icon = def.icon;
+  const disabled = def.comingSoon === true;
 
   const onDragStart = (event: DragEvent) => {
     event.dataTransfer.setData(DRAG_MIME, def.type);
@@ -31,18 +33,31 @@ function PaletteItem({ def, color }: { def: NodeDefinition; color: string }) {
   return (
     <button
       type="button"
-      draggable
-      onDragStart={onDragStart}
-      onClick={onClick}
-      title={def.description}
+      draggable={!disabled}
+      onDragStart={disabled ? undefined : onDragStart}
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
+      title={disabled ? `${def.description} — coming soon` : def.description}
       style={{ "--node-accent": color } as CSSProperties}
-      className="flex w-full cursor-grab items-center gap-2.5 rounded-lg border border-transparent px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-muted active:cursor-grabbing"
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2 py-1.5 text-left transition-colors",
+        disabled
+          ? "cursor-not-allowed opacity-55"
+          : "cursor-grab hover:border-border hover:bg-muted active:cursor-grabbing",
+      )}
     >
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-(--node-accent)/15 text-(--node-accent)">
         <Icon className="size-3.5" />
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm">{def.label}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm">{def.label}</span>
+          {disabled && (
+            <span className="shrink-0 rounded-full border px-1.5 text-[10px] leading-4 text-muted-foreground">
+              Soon
+            </span>
+          )}
+        </span>
         <span className="block truncate text-xs text-muted-foreground">{def.description}</span>
       </span>
     </button>
@@ -54,8 +69,13 @@ export function NodePalette() {
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return NODES_BY_CATEGORY;
-    return NODES_BY_CATEGORY.map((g) => ({
+    // Available nodes first; "Soon" ones after them, in registry order (sort is stable).
+    const ordered = NODES_BY_CATEGORY.map((g) => ({
+      ...g,
+      nodes: [...g.nodes].sort((a, b) => Number(!!a.comingSoon) - Number(!!b.comingSoon)),
+    }));
+    if (!q) return ordered;
+    return ordered.map((g) => ({
       ...g,
       nodes: g.nodes.filter((n) =>
         `${n.label} ${n.description} ${g.category.label}`.toLowerCase().includes(q),

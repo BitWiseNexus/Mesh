@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Trash2, X } from "lucide-react";
+import { CircleAlert, Copy, Trash2, TriangleAlert, X } from "lucide-react";
 import type { CSSProperties } from "react";
 import { toast } from "sonner";
 
@@ -9,16 +9,41 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import type { FlowIssue } from "@/lib/flow/validate";
 import { CATEGORIES, NODE_REGISTRY } from "@/lib/nodes/registry";
+import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
 import { ConfigField } from "./config-fields";
+
+const NO_ISSUES: FlowIssue[] = [];
+
+function IssueList({ issues }: { issues: FlowIssue[] }) {
+  return (
+    <ul className="space-y-1.5 rounded-md border p-2.5 text-xs" aria-label="Problems with this node">
+      {issues.map((issue) => {
+        const isError = issue.severity === "error";
+        const Icon = isError ? CircleAlert : TriangleAlert;
+        return (
+          <li key={issue.id} className="flex gap-2">
+            <Icon
+              className={cn("mt-px size-3.5 shrink-0", isError ? "text-destructive" : "text-amber-500")}
+            />
+            {/* Drop the “Node name”: prefix of field errors — the panel already names the node. */}
+            <span>{issue.message.replace(/^“[^”]*”:\s*/, "")}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function NodeConfigPanel() {
   const node = useFlowStore((s) => s.nodes.find((n) => n.id === s.selectedNodeId));
   const updateNodeData = useFlowStore((s) => s.updateNodeData);
   const deleteNode = useFlowStore((s) => s.deleteNode);
   const selectNode = useFlowStore((s) => s.selectNode);
+  const issues = useFlowStore((s) => (node ? (s.nodeIssues[node.id] ?? NO_ISSUES) : NO_ISSUES));
 
   if (!node) return null;
 
@@ -53,6 +78,8 @@ export function NodeConfigPanel() {
       <ScrollArea className="min-h-0 flex-1">
         {/* key: remount field state when switching between nodes */}
         <div key={node.id} className="space-y-4 p-4">
+          {issues.length > 0 && <IssueList issues={issues} />}
+
           <div className="space-y-1.5">
             <Label htmlFor="node-label">Name</Label>
             <Input
@@ -71,6 +98,7 @@ export function NodeConfigPanel() {
               field={field}
               value={node.data[field.key]}
               onChange={(value) => updateNodeData(node.id, { [field.key]: value })}
+              invalid={issues.some((i) => i.field === field.key)}
             />
           ))}
 

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Support Lead AI Assistant",
+  "description": "",
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "trigger_manual",
+      "data": { "input": "" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_2",
+      "type": "agent_node",
+      "data": {
+        "label": "Lead Parser",
+        "model": "gpt-4o",
+        "system_prompt": "You are a friendly customer support lead parser.",
+        "temperature": 0.7,
+        "max_tool_steps": 5
+      },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_3",
+      "type": "tool_web_search",
+      "data": { "provider": "tavily", "max_results": 5 },
+      "position": { "x": 400, "y": 240 }
+    },
+    {
+      "id": "node_4",
+      "type": "output_display",
+      "data": {},
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1-2", "source": "node_1", "sourceHandle": "out", "target": "node_2", "targetHandle": "in" },
+    {
+      "id": "e2-3",
+      "source": "node_2",
+      "sourceHandle": "tools",
+      "target": "node_3",
+      "targetHandle": "tool",
+      "type": "tool_connection"
+    },
+    { "id": "e2-4", "source": "node_2", "sourceHandle": "out", "target": "node_4", "targetHandle": "in" }
+  ]
+}

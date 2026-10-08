@@ -12,8 +12,8 @@ export default function Home() {
         Build, run and watch multi-agent AI workflows on a visual canvas.
       </p>
       {/* A real link (not Button render=Link, which would get role="button"). */}
-      <Link href="/canvas" className={buttonVariants({ size: "lg" })}>
-        Open canvas
+      <Link href="/flows" className={buttonVariants({ size: "lg" })}>
+        Go to your flows
       </Link>
     </main>
   );

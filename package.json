@@ -1,0 +1,9 @@
+{
+  "name": "mesh",
+  "private": true,
+  "description": "Mesh monorepo scripts (the apps live in frontend/ and backend/)",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:no-emulators": "node scripts/dev.mjs --no-emulators"
+  }
+}

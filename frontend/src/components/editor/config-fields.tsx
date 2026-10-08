@@ -20,11 +20,19 @@ interface FieldProps<F extends FieldDef = FieldDef> {
   field: F;
   value: unknown;
   onChange: (value: unknown) => void;
+  /** Set when flow validation reports a problem with this field. */
+  invalid?: boolean;
 }
 
 type Of<K extends FieldDef["kind"]> = Extract<FieldDef, { kind: K }>;
 
-function NumberInput({ field, value, onChange, id }: FieldProps<Of<"number">> & { id: string }) {
+function NumberInput({
+  field,
+  value,
+  onChange,
+  invalid,
+  id,
+}: FieldProps<Of<"number">> & { id: string }) {
   // Keep a string draft so users can type intermediate states like "" or "0.".
   const [draft, setDraft] = useState(value == null ? "" : String(value));
   const [prev, setPrev] = useState(value);
@@ -38,6 +46,8 @@ function NumberInput({ field, value, onChange, id }: FieldProps<Of<"number">> & 
       id={id}
       type="number"
       inputMode="decimal"
+      aria-invalid={invalid || undefined}
+      aria-required={field.required || undefined}
       min={field.min}
       max={field.max}
       step={field.step}
@@ -87,9 +97,13 @@ function JsonInput({ field, value, onChange, id }: FieldProps<Of<"json">> & { id
   );
 }
 
-export function ConfigField({ field, value, onChange }: FieldProps) {
+export function ConfigField({ field, value, onChange, invalid }: FieldProps) {
   const id = useId();
   const listId = `${id}-suggestions`;
+  const a11y = {
+    "aria-invalid": invalid || undefined,
+    "aria-required": field.required || undefined,
+  };
 
   if (field.kind === "switch") {
     return (
@@ -109,6 +123,7 @@ export function ConfigField({ field, value, onChange }: FieldProps) {
         <>
           <Input
             id={id}
+            {...a11y}
             value={typeof value === "string" ? value : ""}
             placeholder={field.placeholder}
             list={field.suggestions ? listId : undefined}
@@ -129,6 +144,7 @@ export function ConfigField({ field, value, onChange }: FieldProps) {
       control = (
         <Textarea
           id={id}
+          {...a11y}
           rows={field.rows ?? 3}
           value={typeof value === "string" ? value : ""}
           placeholder={field.placeholder}
@@ -139,7 +155,9 @@ export function ConfigField({ field, value, onChange }: FieldProps) {
       );
       break;
     case "number":
-      control = <NumberInput id={id} field={field} value={value} onChange={onChange} />;
+      control = (
+        <NumberInput id={id} field={field} value={value} onChange={onChange} invalid={invalid} />
+      );
       break;
     case "json":
       control = <JsonInput id={id} field={field} value={value} onChange={onChange} />;
@@ -151,7 +169,7 @@ export function ConfigField({ field, value, onChange }: FieldProps) {
           onValueChange={(v) => onChange(v)}
           items={Object.fromEntries(field.options.map((o) => [o.value, o.label]))}
         >
-          <SelectTrigger id={id} className="w-full">
+          <SelectTrigger id={id} {...a11y} className="w-full">
             <SelectValue placeholder={field.placeholder ?? "Select…"} />
           </SelectTrigger>
           <SelectContent>
@@ -168,7 +186,14 @@ export function ConfigField({ field, value, onChange }: FieldProps) {
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{field.label}</Label>
+      <Label htmlFor={id}>
+        {field.label}
+        {field.required && (
+          <span aria-hidden className="-ml-1 text-destructive">
+            *
+          </span>
+        )}
+      </Label>
       {control}
       {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
     </div>

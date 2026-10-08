@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useFlowStore } from "./flow-store";
+import {
+  bindDraft,
+  draftKeyFor,
+  findLegacyDraft,
+  flushDraft,
+  parseStoredDraft,
+  useFlowStore,
+} from "./flow-store";
 
 const store = () => useFlowStore.getState();
 
 beforeEach(() => {
-  store().newFlow();
+  store().newFlow("blank");
 });
 
 describe("flow store", () => {
@@ -91,17 +98,127 @@ describe("flow store", () => {
     expect(flow).toMatchObject({ schema_version: 1, flow_id: null, name: "My flow" });
     expect(flow.nodes).toHaveLength(2);
 
-    store().newFlow();
+    store().newFlow("blank");
     store().loadFlow(flow);
     expect(store().toFlow()).toEqual(flow);
     expect(store().past).toEqual([]); // loading resets history
   });
 
-  it("persists a draft to localStorage without UI state or history", () => {
-    store().addNode("trigger_manual", { x: 5, y: 5 });
-    const saved = JSON.parse(localStorage.getItem("mesh:flow-draft")!);
-    expect(saved.state.nodes).toHaveLength(1);
-    expect(saved.state.nodes[0]).not.toHaveProperty("selected");
-    expect(saved.state).not.toHaveProperty("past");
+  it("starts new flows from the starter template", () => {
+    store().newFlow();
+    expect(store().nodes.map((n) => n.type)).toEqual(["trigger_manual", "output_display"]);
+    expect(store().edges).toHaveLength(1);
+    expect(store().issues).toEqual([]);
+  });
+
+  it("keeps validation issues in sync with the graph", () => {
+    expect(store().issues.map((i) => i.id)).toEqual(["no-trigger"]);
+    const trigger = store().addNode("trigger_manual", { x: 0, y: 0 });
+    expect(store().issues).toEqual([]);
+
+    const agent = store().addNode("agent_node", { x: 300, y: 0 });
+    const api = store().addNode("tool_http", { x: 300, y: 200 });
+    expect(store().nodeIssues[api].map((i) => i.field ?? i.id)).toEqual(["url", `unattached:${api}`]);
+
+    store().onConnect({ source: trigger, sourceHandle: "out", target: agent, targetHandle: "in" });
+    store().onConnect({ source: agent, sourceHandle: "tools", target: api, targetHandle: "tool" });
+    store().updateNodeData(api, { url: "https://api.example.com" });
+    expect(store().issues).toEqual([]);
+  });
+
+  it("doesn't replace issues when only positions change", () => {
+    const id = store().addNode("tool_web_search", { x: 0, y: 0 });
+    const before = store().issues;
+    store().onNodesChange([{ type: "position", id, position: { x: 50, y: 50 }, dragging: true }]);
+    expect(store().issues).toBe(before);
+  });
+
+  it("makes one deletion a single undo step, but separate deletions separate steps", async () => {
+    const a = store().addNode("trigger_manual", { x: 0, y: 0 });
+    const b = store().addNode("output_display", { x: 300, y: 0 });
+    const c = store().addNode("output_display", { x: 300, y: 200 });
+    store().onConnect({ source: a, sourceHandle: "out", target: b, targetHandle: "in" });
+    const edgeId = store().edges[0].id;
+
+    // React Flow deletes node b as a node change + an edge change in the same tick.
+    store().onNodesChange([{ type: "remove", id: b }]);
+    store().onEdgesChange([{ type: "remove", id: edgeId }]);
+    await Promise.resolve();
+    store().onNodesChange([{ type: "remove", id: c }]);
+    expect(store().nodes.map((n) => n.id)).toEqual([a]);
+
+    store().undo();
+    expect(store().nodes.map((n) => n.id)).toEqual([a, c]);
+    store().undo();
+    expect(store().nodes.map((n) => n.id)).toEqual([a, b, c]);
+    expect(store().edges).toHaveLength(1);
+  });
+
+
+  it("tracks the server version it was loaded from", () => {
+    const flow = { ...store().toFlow(), flow_id: "f1", version: 4 };
+    store().loadFlow(flow);
+    expect(store().version).toBe(4);
+    store().markSaved(5);
+    expect(store().version).toBe(5);
+    expect(store().toFlow()).not.toHaveProperty("version");
+  });
+
+  describe("local draft backup", () => {
+    const read = (key: string) => JSON.parse(localStorage.getItem(key)!);
+
+    it("writes the open flow to a per-user, per-flow key after edits settle", () => {
+      localStorage.clear();
+      bindDraft("alice", "flow_a");
+      store().addNode("trigger_manual", { x: 5, y: 5 });
+      expect(localStorage.getItem(draftKeyFor("alice", "flow_a"))).toBeNull(); // debounced
+      flushDraft();
+      const saved = read(draftKeyFor("alice", "flow_a"));
+      expect(saved.version).toBe(2);
+      expect(saved.state.flow.nodes).toHaveLength(1);
+      expect(saved.state.flow.nodes[0]).not.toHaveProperty("selected");
+      expect(saved.state).not.toHaveProperty("past");
+    });
+
+    it("finishes the previous flow's pending write under its own key when switching", () => {
+      localStorage.clear();
+      bindDraft("alice", "flow_a");
+      store().setMeta({ name: "A" });
+      bindDraft("alice", "flow_b"); // flushes A's pending write first
+      store().setMeta({ name: "B" });
+      flushDraft();
+      expect(read(draftKeyFor("alice", "flow_a")).state.flow.name).toBe("A");
+      expect(read(draftKeyFor("alice", "flow_b")).state.flow.name).toBe("B");
+    });
+  });
+
+  describe("legacy drafts (pre-dashboard)", () => {
+    const v2 = (flow: object) => JSON.stringify({ version: 2, state: { flow } });
+    const node = { id: "n1", type: "trigger_manual", data: {}, position: { x: 0, y: 0 } };
+
+    it("parses v1 and v2 drafts and rejects invalid ones", () => {
+      expect(parseStoredDraft(v2({ name: "Two", nodes: [node], edges: [] }))?.name).toBe("Two");
+      expect(
+        parseStoredDraft(
+          JSON.stringify({ version: 1, state: { name: "One", nodes: [node], edges: [] } }),
+        )?.name,
+      ).toBe("One");
+      expect(parseStoredDraft(v2({ name: "x", nodes: [{ ...node, type: "gone" }], edges: [] }))).toBeNull();
+      expect(parseStoredDraft("{not json")).toBeNull();
+      expect(parseStoredDraft(null)).toBeNull();
+    });
+
+    it("finds the user's or the shared pre-auth draft, skipping empty ones", () => {
+      localStorage.clear();
+      expect(findLegacyDraft("alice")).toBeNull();
+      localStorage.setItem("mesh:flow-draft", v2({ name: "Empty", nodes: [], edges: [] }));
+      expect(findLegacyDraft("alice")).toBeNull();
+      localStorage.setItem("mesh:flow-draft:alice", v2({ name: "Alice's", nodes: [node], edges: [] }));
+      expect(findLegacyDraft("alice")).toMatchObject({
+        key: "mesh:flow-draft:alice",
+        flow: { name: "Alice's" },
+      });
+      expect(findLegacyDraft("bob")).toBeNull();
+    });
   });
 });
