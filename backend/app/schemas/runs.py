@@ -27,6 +27,21 @@ class NodeRunState(BaseModel):
     handles: list[str] | None = None
     #: Tools: how often the agent called it (the other fields describe the latest call).
     calls: int | None = None
+    #: Steps inside a loop: the pass this entry is from (the latest one).
+    iteration: int | None = None
+
+
+class RunSummary(BaseModel):
+    """A run in a flow's history (no node states)."""
+
+    run_id: str
+    flow_version: int
+    status: RunStatus
+    trigger_id: str
+    error: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 class RunInfo(BaseModel):

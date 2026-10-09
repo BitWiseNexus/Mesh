@@ -69,7 +69,7 @@ function EditorLayout() {
     }
     if (dirty || state.status === "error") void save();
   }, [save]);
-  const { start, stop, follow } = useRun();
+  const { start, stop, follow, show } = useRun();
   useRunLifecycle(follow);
   /** Ctrl+Enter: run when the flow is valid, has one trigger and nothing is running. */
   const runShortcut = useCallback(() => {
@@ -94,7 +94,12 @@ function EditorLayout() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <EditorToolbar onSave={saveNow} onRun={(id) => void start(id)} onStop={() => void stop()} />
+      <EditorToolbar
+        onSave={saveNow}
+        onRun={(id) => void start(id)}
+        onStop={() => void stop()}
+        onShowRun={(id) => void show(id)}
+      />
       <ConflictBanner
         onLoadLatest={() => void loadLatest()}
         onOverwrite={() => void save({ overwrite: true })}

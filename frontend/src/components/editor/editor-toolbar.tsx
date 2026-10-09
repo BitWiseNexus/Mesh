@@ -20,6 +20,7 @@ import { useRunStore } from "@/stores/run-store";
 
 import { FlowIssuesMenu } from "./flow-issues-menu";
 import { RunButton } from "./run-button";
+import { RunHistoryMenu } from "./run-history-menu";
 import { SaveStatus } from "./save-status";
 
 const slugify = (name: string) =>
@@ -29,10 +30,12 @@ export function EditorToolbar({
   onSave,
   onRun,
   onStop,
+  onShowRun,
 }: {
   onSave: () => void;
   onRun: (triggerId?: string) => void;
   onStop: () => void;
+  onShowRun: (runId: string) => void;
 }) {
   const name = useFlowStore((s) => s.name);
   const setMeta = useFlowStore((s) => s.setMeta);
@@ -192,6 +195,7 @@ export function EditorToolbar({
             </Button>
           </Hint>
         )}
+        <RunHistoryMenu onShow={onShowRun} />
         <RunButton onRun={onRun} onStop={onStop} />
         <Separator orientation="vertical" className="mx-1 h-5" />
         <UserMenu />

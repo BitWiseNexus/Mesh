@@ -1,6 +1,7 @@
 """Runs: start a flow, watch it live (SSE), stop it, read its record.
 
     POST /flows/{flow_id}/runs     start a run of the flow's saved version → 201 RunInfo
+    GET  /flows/{flow_id}/runs     the flow's latest runs (history), newest first
     GET  /runs/{run_id}            the run's record (statuses + outputs)
     GET  /runs/{run_id}/stream     Server-Sent Events, see below
     POST /runs/{run_id}/cancel     stop a live run → RunInfo once it's recorded as cancelled
@@ -16,7 +17,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Path, Request, status
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.flows import FlowId
@@ -30,7 +31,7 @@ from app.engine.executor import not_runnable_issues
 from app.engine.validation import FlowIssue
 from app.repositories.credentials import CredentialRepository
 from app.repositories.runs import RunRepository
-from app.schemas.runs import RunInfo, RunRequest
+from app.schemas.runs import RunInfo, RunRequest, RunSummary
 from app.services.credentials import UserSecrets
 from app.services.runs import RunManager
 
@@ -98,6 +99,20 @@ async def start_run(
         secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
     )
     return info
+
+
+@router.get("/flows/{flow_id}/runs")
+async def list_runs(
+    flow_id: FlowId,
+    user: CurrentUser,
+    flows: FlowRepo,
+    runs: Runs,
+    manager: Manager,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> list[RunSummary]:
+    """The flow's latest runs, newest first."""
+    await flows.get(user.uid, flow_id)  # 404 unless it's the caller's flow
+    return await runs.list_for_flow(user.uid, flow_id, limit=limit, live=manager.is_live)
 
 
 @router.get("/runs/{run_id}")

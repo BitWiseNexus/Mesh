@@ -11,14 +11,17 @@ The runner (context.md §8k) schedules from the plan alone:
 - a finished step delivers on the edges of the output handle(s) it chose and skips the rest
   (`outputs` lists every data output handle of the type, even unconnected ones).
 - `{{input}}` / `{{<name>.output}}` resolve through `names` (ref first, then id).
+- Loops: a Loop's `loop_body` is what it repeats (reachable from its `loop` output without
+  passing through it); edges from the body back into the Loop are `back` edges. The Loop starts on
+  its other ("entry") inputs, then runs again each time the body comes back.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from app.core.errors import ApiError
-from app.engine.graph import display_name, find_handle, node_ref
+from app.engine.graph import display_name, find_handle, loop_body, node_ref
 from app.engine.validation import FlowIssue, validate_flow, with_defaults
 from app.nodes.catalog import NodeSpec, get_spec
 from app.schemas.flow import Edge, EdgeType, Flow
@@ -55,6 +58,8 @@ class PlanEdge:
     source_handle: str
     target: str
     target_handle: str
+    #: Into a Loop from the body it repeats (not awaited when the Loop first starts).
+    back: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,8 @@ class PlannedNode:
     outputs: Mapping[str, tuple[PlanEdge, ...]] = field(default_factory=dict)
     #: Ids of the nodes attached to this agent's Tools handle, in edge order.
     tools: tuple[str, ...] = ()
+    #: Loops: the steps it repeats.
+    loop_body: frozenset[str] = frozenset()
 
     @property
     def spec(self) -> NodeSpec:
@@ -125,6 +132,16 @@ def compile_flow(flow: Flow, trigger_id: str | None = None) -> ExecutionPlan:
     tool_edges = [e for e in flow.edges if e.type is EdgeType.TOOL_CONNECTION]
 
     steps = _reachable(trigger_id, [(e.source, e.target) for e in data_edges])
+    links = [(e.source, e.source_handle, e.target) for e in data_edges if e.source in steps]
+    bodies = {
+        n.id: frozenset(loop_body(n.id, links))
+        for n in flow.nodes
+        if n.id in steps and n.type is NodeType.LOGIC_LOOP
+    }
+    data_edges = [
+        replace(e, back=True) if e.target in bodies and e.source in bodies[e.target] else e
+        for e in data_edges
+    ]
     # Validation guarantees no node is both a step and a tool.
     in_run = steps | _reachable_from(steps, [(e.source, e.target) for e in tool_edges])
 
@@ -150,6 +167,7 @@ def compile_flow(flow: Flow, trigger_id: str | None = None) -> ExecutionPlan:
             else (),
             outputs=outputs if is_step else {},
             tools=tuple(e.target for e in tool_edges if e.source == node.id),
+            loop_body=bodies.get(node.id, frozenset()),
         )
 
     # Refs win over ids (a ref may only equal its own node's id, so there are no clashes).

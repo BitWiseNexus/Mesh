@@ -22,6 +22,8 @@ from tests.flows import edge, flow, node, tool_edge
 def test_registered_executors() -> None:
     assert runnable_types() == {
         NodeType.TRIGGER_MANUAL,
+        NodeType.LOGIC_IF,
+        NodeType.LOGIC_LOOP,
         NodeType.AGENT_NODE,
         NodeType.OUTPUT_DISPLAY,
     }
@@ -42,17 +44,17 @@ def test_not_runnable_nodes_and_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         flow(
             [
                 node("t", "trigger_manual"),
-                node("if", "logic_if", value="x"),
+                node("ok", "hitl_approval"),
                 node("a", "agent_node"),
                 node("s", "tool_web_search"),
             ],
-            [edge("t", "if"), edge("if", "a", "true"), tool_edge("a", "s")],
+            [edge("t", "ok"), edge("ok", "a", "approved"), tool_edge("a", "s")],
         )
     )
     assert [(i.id, i.message) for i in not_runnable_issues(plan)] == [
         (
-            "not-runnable:if",
-            "“If / Else”: If / Else nodes can't run yet — they arrive in a later update",
+            "not-runnable:ok",
+            "“Approval Gate”: Approval Gate nodes can't run yet — they arrive in a later update",
         ),
         (
             "not-runnable:s",

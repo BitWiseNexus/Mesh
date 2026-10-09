@@ -74,6 +74,33 @@ def upstream_node_ids(node_id: str, edges: Sequence[Edge]) -> list[str]:
     return [i for i in result if i != node_id]
 
 
+def loop_body(loop_id: str, links: Iterable[tuple[str, str, str]]) -> set[str]:
+    """The nodes a Loop repeats: everything reachable from its `loop` output without passing
+    through the Loop itself. `links` are data edges as (source, resolved source handle, target)."""
+    links = list(links)
+    body: set[str] = set()
+    queue = [t for s, h, t in links if s == loop_id and h == "loop" and t != loop_id]
+    while queue:
+        current = queue.pop()
+        if current in body:
+            continue
+        body.add(current)
+        queue.extend(t for s, _, t in links if s == current and t != loop_id)
+    return body
+
+
+def resolved_links(nodes: Sequence[Node], edges: Iterable[Edge]) -> list[tuple[str, str, str]]:
+    """Data edges as (source, source handle with null resolved, target)."""
+    types = {n.id: n.type for n in nodes}
+    links = []
+    for e in edges:
+        if e.type is not EdgeType.DATA or e.source not in types:
+            continue
+        handle = find_handle(types[e.source], e.source_handle, "source")
+        links.append((e.source, handle.id if handle else e.source_handle or "", e.target))
+    return links
+
+
 def cycles(edges: Iterable[Edge]) -> list[set[str]]:
     """Groups of nodes that lie on a cycle of `edges` (strongly connected components with more
     than one node; the schema forbids self-loops). Iterative Kosaraju, O(nodes + edges)."""

@@ -67,8 +67,14 @@ Attach nodes to an agent's **Tools** handle and the agent can call them: **Web S
 with a key, DuckDuckGo without), **Web Scraper** (a page's readable text), **API Caller** (any
 REST endpoint) and **other agents**. In an API Caller or sub-agent, `{{input.<name>}}` declares a
 value the agent fills in. Tools that fetch URLs can't reach private or local addresses in
-production. Nodes that can't run yet (If / Else, Loop, Approval Gate) are reported when you press
-Run.
+production.
+
+### Logic and history
+
+**If / Else** continues on True or False (text is compared ignoring case); **Loop** repeats the
+nodes on its Loop output until "Max iterations" or until the result contains a stop text, then
+continues on Done. **Run history** (toolbar) lists a flow's past runs and replays any of them on
+the canvas. The Approval Gate isn't available yet and is reported when you press Run.
 
 ## Tests
 

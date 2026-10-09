@@ -159,8 +159,67 @@ describe("edgeRunState", () => {
   });
 });
 
+describe("loops", () => {
+  it("records which pass a node is on", () => {
+    const state = replay(
+      e({ type: "node_started", node_id: "a", iteration: 1 }),
+      e({ type: "node_finished", node_id: "a", status: "succeeded", output: "x!", handles: ["out"] }),
+      e({ type: "node_started", node_id: "a", iteration: 2 }),
+    );
+    expect(state.nodes.a).toMatchObject({ status: "running", iteration: 2, text: "" });
+    expect(state.order).toEqual(["a"]);
+  });
+});
+
 describe("useRunStore", () => {
   beforeEach(() => useRunStore.getState().reset());
+
+  it("shows a past run from the history", () => {
+    const run: RunInfo = {
+      run_id: "old",
+      flow_id: "f1",
+      flow_version: 3,
+      status: "succeeded",
+      trigger_id: "t",
+      input: null,
+      error: null,
+      created_at: at,
+      started_at: at,
+      finished_at: at,
+      node_states: {
+        a: {
+          status: "succeeded",
+          started_at: at,
+          finished_at: at,
+          output: "done",
+          output_truncated: false,
+          error: null,
+          handles: ["out"],
+          iteration: 4,
+        },
+      },
+    };
+    useRunStore.getState().showRun("f1", run);
+    expect(useRunStore.getState()).toMatchObject({
+      flowId: "f1",
+      runId: "old",
+      phase: "succeeded",
+      fromHistory: true,
+      panelOpen: true,
+      createdAt: at,
+      flowVersion: 3,
+    });
+    expect(useRunStore.getState().nodes.a).toMatchObject({ output: "done", iteration: 4 });
+    // Starting a new run is a live one again.
+    useRunStore.getState().begin("f1");
+    expect(useRunStore.getState()).toMatchObject({ fromHistory: false, nodes: {}, flowVersion: null });
+  });
+
+  it("remembers when a started run was created, and from which version", () => {
+    useRunStore.getState().begin("f1");
+    useRunStore.getState().attach({ run_id: "r", status: "queued", created_at: at, flow_version: 7 } as RunInfo);
+    expect(useRunStore.getState()).toMatchObject({ runId: "r", createdAt: at, flowVersion: 7 });
+  });
 
   it("begins a run with the panel open and fails with details in the log", () => {
     const store = useRunStore.getState();

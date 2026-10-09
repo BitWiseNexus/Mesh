@@ -20,7 +20,9 @@ from app.engine.graph import (
     display_name,
     find_handle,
     find_referenced_node,
+    loop_body,
     node_ref,
+    resolved_links,
     upstream_node_ids,
     with_field_defaults,
 )
@@ -138,6 +140,7 @@ def validate_flow(flow: Flow) -> list[FlowIssue]:
     data_edges = [e for e in edges if e.type is EdgeType.DATA]
     attached_tools = {e.target for e in tool_edges}
     in_tool_cycle = {i for c in cycles(tool_edges) for i in c}
+    links = resolved_links(nodes, edges)
     # Data cycles are only allowed through a Loop node, which bounds how often they repeat.
     unbounded_cycle = {
         i
@@ -197,14 +200,22 @@ def validate_flow(flow: Flow) -> list[FlowIssue]:
                 **at,
             )
 
-        if node.type is NodeType.LOGIC_LOOP and not any(
-            e.source == node.id and e.source_handle == "loop" for e in edges
-        ):
-            warning(
-                f"empty-loop:{node.id}",
-                f"{name(node)} has nothing connected to its Loop output",
-                **at,
-            )
+        if node.type is NodeType.LOGIC_LOOP:
+            if not any(e.source == node.id and e.source_handle == "loop" for e in edges):
+                warning(
+                    f"empty-loop:{node.id}",
+                    f"{name(node)} has nothing connected to its Loop output",
+                    **at,
+                )
+            else:
+                body = loop_body(node.id, links)
+                if not any(s in body and t == node.id for s, _, t in links):
+                    warning(
+                        f"loop-no-return:{node.id}",
+                        f"{name(node)}'s Loop output never leads back to it, so the loop runs "
+                        "only once",
+                        **at,
+                    )
 
         for field in spec.fields:
             value = node.data.get(field.key)

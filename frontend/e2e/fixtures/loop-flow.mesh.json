@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Loop demo",
+  "description": "Repeats an agent three times.",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": {
+        "input": "go"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_l",
+      "type": "logic_loop",
+      "ref": "loop",
+      "data": {
+        "max_iterations": 3,
+        "until": ""
+      },
+      "position": {
+        "x": 400,
+        "y": 0
+      }
+    },
+    {
+      "id": "node_a",
+      "type": "agent_node",
+      "ref": "shout",
+      "data": {
+        "label": "Shout",
+        "model": "mock/echo",
+        "prompt": "{{input}}!"
+      },
+      "position": {
+        "x": 400,
+        "y": 260
+      }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "result",
+      "data": {},
+      "position": {
+        "x": 800,
+        "y": 0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "node_t",
+      "sourceHandle": "out",
+      "target": "node_l",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e2",
+      "source": "node_l",
+      "sourceHandle": "loop",
+      "target": "node_a",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e3",
+      "source": "node_a",
+      "sourceHandle": "out",
+      "target": "node_l",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e4",
+      "source": "node_l",
+      "sourceHandle": "done",
+      "target": "node_o",
+      "targetHandle": "in"
+    }
+  ]
+}

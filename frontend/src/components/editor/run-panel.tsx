@@ -4,6 +4,7 @@ import { Check, Loader2, Minus, Square, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { formatRelativeTime } from "@/lib/format";
 import { NODE_REGISTRY, nodeDisplayName } from "@/lib/nodes/registry";
 import type { NodeRunStatus } from "@/lib/runs-api";
 import { cn } from "@/lib/utils";
@@ -168,6 +169,7 @@ function NodeOutput({ id, run, name, type }: { id: string; run: NodeRun; name: s
         <span className="text-muted-foreground">{type ? NODE_REGISTRY[type].label : ""}</span>
         <span className="ml-auto tabular-nums text-muted-foreground">
           {run.calls ? `called ${run.calls}× · ` : ""}
+          {run.iteration ? `pass ${run.iteration} · ` : ""}
           {run.status === "skipped" ? "skipped" : seconds(run.startedAt, run.finishedAt)}
         </span>
       </div>
@@ -264,13 +266,37 @@ function Tab({ id, active, onSelect, children }: { id: string; active: boolean; 
   );
 }
 
+/** For a run opened from the history: when it ran, and whether the flow has changed since. */
+function HistoryNote() {
+  const fromHistory = useRunStore((s) => s.fromHistory);
+  const createdAt = useRunStore((s) => s.createdAt);
+  const runVersion = useRunStore((s) => s.flowVersion);
+  const flowVersion = useFlowStore((s) => s.version);
+  if (!fromHistory || !createdAt) return null;
+  const older = runVersion !== null && flowVersion !== null && runVersion !== flowVersion;
+  return (
+    <span className="truncate text-xs text-muted-foreground" aria-label="Run from history">
+      Run from {formatRelativeTime(createdAt)}
+      {older && " · an earlier version of this flow"}
+    </span>
+  );
+}
+
 /** The run drawer under the canvas: per-node output (streamed live) and the run's log. */
 export function RunPanel() {
   const open = useRunStore((s) => s.panelOpen && s.phase !== "idle");
   const phase = useRunStore((s) => s.phase);
   const startedAt = useRunStore((s) => s.startedAt);
   const finishedAt = useRunStore((s) => s.finishedAt);
-  const [tab, setTab] = useState<"output" | "logs">("output");
+  // Each run shown (a new one, or one opened from the history — even the same one again) opens
+  // on its Output.
+  const view = useRunStore((s) => s.view);
+  const [choice, setChoice] = useState<{ view: number; tab: "output" | "logs" }>({
+    view,
+    tab: "output",
+  });
+  const tab = choice.view === view ? choice.tab : "output";
+  const setTab = (next: "output" | "logs") => setChoice({ view, tab: next });
   if (!open) return null;
 
   return (
@@ -281,6 +307,7 @@ export function RunPanel() {
           {PHASE[phase].label}
         </span>
         <Elapsed from={startedAt} to={finishedAt} />
+        <HistoryNote />
         <div role="tablist" aria-label="Run details" className="ml-2 flex gap-1">
           <Tab id="output" active={tab === "output"} onSelect={() => setTab("output")}>
             Output

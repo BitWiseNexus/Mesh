@@ -11,7 +11,11 @@ export const FIXTURE = path.join(__dirname, "fixtures", "support-flow.mesh.json"
 export const ECHO_FIXTURE = path.join(__dirname, "fixtures", "echo-flow.mesh.json");
 /** Manual Trigger → Lead Agent (mock/tools) → Output; tools: Writer agent, Health API (/health). */
 export const TOOLS_FIXTURE = path.join(__dirname, "fixtures", "tools-flow.mesh.json");
-/** Manual Trigger → If / Else (no executor yet) → Output. */
+/** Manual Trigger → Approval Gate (no executor until Phase 6) → Output. */
+export const APPROVAL_FIXTURE = path.join(__dirname, "fixtures", "approval-flow.mesh.json");
+/** Manual Trigger (“go”) → Loop ×3 ⟲ Shout agent (mock/echo, appends “!”); Done → Output. */
+export const LOOP_FIXTURE = path.join(__dirname, "fixtures", "loop-flow.mesh.json");
+/** Manual Trigger (“yes please”) → If “contains yes” → Approved / Rejected outputs. */
 export const BRANCH_FIXTURE = path.join(__dirname, "fixtures", "branch-flow.mesh.json");
 
 export interface TestUser {

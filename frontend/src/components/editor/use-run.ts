@@ -1,11 +1,12 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 
 import { useApi } from "@/components/auth/auth-provider";
 import { ApiError } from "@/lib/api";
-import { followRun, runsApi, type RunInfo } from "@/lib/runs-api";
+import { followRun, runKeys, runsApi, type RunInfo } from "@/lib/runs-api";
 import { useFlowStore } from "@/stores/flow-store";
 import { IDLE_RUN, isRunActive, useRunStore } from "@/stores/run-store";
 
@@ -45,6 +46,7 @@ export function useRun() {
   const api = useApi();
   const runs = useMemo(() => runsApi(api), [api]);
   const { save } = useFlowSave();
+  const queryClient = useQueryClient();
 
   const follow = useCallback(
     async (run: Pick<RunInfo, "run_id">) => {
@@ -52,10 +54,20 @@ export function useRun() {
       const controller = new AbortController();
       following = controller;
       const ours = () => useRunStore.getState().runId === run.run_id;
+      const flowId = useRunStore.getState().flowId;
       try {
-        await followRun(runs, run.run_id, (event) => ours() && useRunStore.getState().apply(event), {
-          signal: controller.signal,
-        });
+        await followRun(
+          runs,
+          run.run_id,
+          (event) => {
+            if (!ours()) return;
+            useRunStore.getState().apply(event);
+            if ((event.type === "run_finished" || event.type === "snapshot") && flowId) {
+              void queryClient.invalidateQueries({ queryKey: runKeys.list(flowId) });
+            }
+          },
+          { signal: controller.signal },
+        );
       } catch {
         if (controller.signal.aborted || !ours()) return;
         // The stream is gone; the stored record still says how the run went.
@@ -68,7 +80,7 @@ export function useRun() {
         if (following === controller) following = null;
       }
     },
-    [runs],
+    [runs, queryClient],
   );
 
   /** Saves if needed; returns why the flow can't be run as saved, or null. */
@@ -128,7 +140,24 @@ export function useRun() {
     }
   }, [runs]);
 
-  return { start, stop, follow };
+  /** Opens a past run of the open flow (from the history) on the canvas and in the panel. */
+  const show = useCallback(
+    async (runId: string) => {
+      const flowId = useFlowStore.getState().flowId;
+      if (!flowId || isRunActive(useRunStore.getState().phase)) return;
+      try {
+        const run = await runs.get(runId);
+        if (useFlowStore.getState().flowId !== flowId) return;
+        stopFollowing();
+        useRunStore.getState().showRun(flowId, run);
+      } catch (error) {
+        toast.error(error instanceof ApiError ? error.message : "Couldn't open the run.");
+      }
+    },
+    [runs],
+  );
+
+  return { start, stop, follow, show };
 }
 
 /**
@@ -144,7 +173,14 @@ export function useRunLifecycle(follow: (run: Pick<RunInfo, "run_id">) => Promis
       useRunStore.getState().reset();
     } else if (run.runId && isRunActive(run.phase)) {
       const runId = run.runId;
-      useRunStore.setState({ ...IDLE_RUN, flowId, runId, phase: "running", panelOpen: run.panelOpen });
+      useRunStore.setState({
+        ...IDLE_RUN,
+        flowId,
+        runId,
+        phase: "running",
+        panelOpen: run.panelOpen,
+        view: run.view + 1,
+      });
       void follow({ run_id: runId });
     }
     return stopFollowing;

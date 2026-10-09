@@ -2,14 +2,14 @@
   "schema_version": 1,
   "flow_id": null,
   "name": "Branch demo",
-  "description": "",
+  "description": "If / Else routes to one of two outputs.",
   "nodes": [
     {
       "id": "node_t",
       "type": "trigger_manual",
       "ref": "trigger",
       "data": {
-        "input": "x"
+        "input": "yes please"
       },
       "position": {
         "x": 0,
@@ -19,11 +19,11 @@
     {
       "id": "node_i",
       "type": "logic_if",
-      "ref": "if",
+      "ref": "check",
       "data": {
         "field": "{{input}}",
         "operator": "contains",
-        "value": "x"
+        "value": "yes"
       },
       "position": {
         "x": 400,
@@ -31,13 +31,27 @@
       }
     },
     {
-      "id": "node_o",
+      "id": "node_yes",
       "type": "output_display",
-      "ref": "result",
-      "data": {},
+      "ref": "approved",
+      "data": {
+        "label": "Approved"
+      },
       "position": {
         "x": 800,
-        "y": 0
+        "y": -120
+      }
+    },
+    {
+      "id": "node_no",
+      "type": "output_display",
+      "ref": "rejected",
+      "data": {
+        "label": "Rejected"
+      },
+      "position": {
+        "x": 800,
+        "y": 120
       }
     }
   ],
@@ -53,7 +67,14 @@
       "id": "e2",
       "source": "node_i",
       "sourceHandle": "true",
-      "target": "node_o",
+      "target": "node_yes",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e3",
+      "source": "node_i",
+      "sourceHandle": "false",
+      "target": "node_no",
       "targetHandle": "in"
     }
   ]

@@ -97,6 +97,8 @@ class RunContext:
         self.sink = sink
         self.secrets: Secrets = secrets or NoSecrets()
         self.outputs: dict[str, Any] = {}
+        #: Loop id → how many times it has started its body (see the runner).
+        self.iterations: dict[str, int] = {}
         #: Data edges that delivered into each node.
         self.delivered: dict[str, list[PlanEdge]] = {}
 
@@ -134,6 +136,11 @@ class NodeContext:
     @property
     def data(self) -> dict[str, Any]:
         return self.node.data
+
+    @property
+    def iteration(self) -> int:
+        """For a Loop: how many times its body has run so far (0 when it first starts)."""
+        return self.run.iterations.get(self.node.id, 0)
 
     def _resolve(self, part: InputPart | RefPart) -> Any:
         if isinstance(part, InputPart):

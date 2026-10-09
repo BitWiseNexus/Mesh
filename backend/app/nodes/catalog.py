@@ -557,6 +557,8 @@ _SPECS: list[NodeSpec] = [
                 key="operator",
                 label="Operator",
                 kind="select",
+                help="Text is compared ignoring upper/lower case and surrounding spaces. "
+                "Greater / less than compare numbers.",
                 options=[
                     OptionSpec(value="equals", label="equals"),
                     OptionSpec(value="not_equals", label="does not equal"),
@@ -590,7 +592,8 @@ _SPECS: list[NodeSpec] = [
                 "until",
                 "Stop when output contains",
                 templated=True,
-                help="Leave empty to always run the maximum number of iterations.",
+                help="Checked on what comes back from the loop (ignoring upper/lower case). "
+                "Leave empty to always run the maximum number of iterations.",
             ),
         ],
     ),

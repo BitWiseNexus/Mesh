@@ -4,7 +4,7 @@ Document `runs/{run_id}`:
     owner_uid, flow_id, flow_version, status, trigger_id, input, error,
     created_at, started_at, finished_at,
     node_states: {node_id: {status, started_at, finished_at, error, handles,
-                            output_json, output_truncated, calls}}
+                            output_json, output_truncated, calls, iteration}}
                  (a tool node's entry is its latest call; `calls` counts them)
 
 Outputs are stored as JSON text (`output_json`): Firestore can't hold arrays inside arrays, and
@@ -16,15 +16,17 @@ output keeps a text preview and `output_truncated: true`.
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
 from app.core.errors import NotFoundError
 from app.engine.events import FINISHED_RUN_STATUSES, RunEvent
-from app.schemas.runs import NodeRunState, RunInfo
+from app.schemas.runs import NodeRunState, RunInfo, RunSummary
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,17 @@ OUTPUT_MAX_CHARS = 20_000
 #: Characters of output kept per run in total.
 RUN_OUTPUT_BUDGET = 600_000
 INTERRUPTED = "The run was interrupted because the server restarted."
+SUMMARY_FIELDS = [
+    "flow_version",
+    "status",
+    "trigger_id",
+    "error",
+    "created_at",
+    "started_at",
+    "finished_at",
+]
+#: Deletes per Firestore batch (the limit is 500 writes).
+DELETE_BATCH = 400
 
 
 class RunNotFoundError(NotFoundError):
@@ -54,6 +67,7 @@ def _node_state(raw: dict[str, Any]) -> NodeRunState:
         error=raw.get("error"),
         handles=raw.get("handles"),
         calls=raw.get("calls"),
+        iteration=raw.get("iteration"),
     )
 
 
@@ -75,7 +89,52 @@ def _to_info(run_id: str, data: dict[str, Any]) -> RunInfo:
 
 class RunRepository:
     def __init__(self, db: firestore.AsyncClient) -> None:
+        self._db = db
         self._collection = db.collection(COLLECTION)
+
+    def _flow_query(self, owner_uid: str, flow_id: str) -> Any:
+        return self._collection.where(filter=FieldFilter("owner_uid", "==", owner_uid)).where(
+            filter=FieldFilter("flow_id", "==", flow_id)
+        )
+
+    async def list_for_flow(
+        self, owner_uid: str, flow_id: str, *, limit: int, live: Callable[[str], bool]
+    ) -> list[RunSummary]:
+        """The flow's runs, newest first. Needs the composite index (owner_uid, flow_id,
+        created_at desc) in firebase/firestore.indexes.json. Runs that claim to be active but
+        aren't `live` show as interrupted (they're marked so when opened, see `get`)."""
+        query = (
+            self._flow_query(owner_uid, flow_id)
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .select(SUMMARY_FIELDS)
+            .limit(limit)
+        )
+        summaries = []
+        async for snapshot in query.stream():
+            data = snapshot.to_dict()
+            if data["status"] not in FINISHED_RUN_STATUSES and not live(snapshot.id):
+                data |= {"status": "failed", "error": INTERRUPTED}
+            summaries.append(RunSummary(run_id=snapshot.id, **data))
+        return summaries
+
+    async def delete_for_flow(self, owner_uid: str, flow_id: str) -> int:
+        """Deletes every run of the flow; returns how many."""
+        deleted = 0
+        while True:
+            snapshots = [
+                s
+                async for s in self._flow_query(owner_uid, flow_id)
+                .limit(DELETE_BATCH)
+                .select([])
+                .stream()
+            ]
+            if not snapshots:
+                return deleted
+            batch = self._db.batch()
+            for snapshot in snapshots:
+                batch.delete(snapshot.reference)
+            await batch.commit()
+            deleted += len(snapshots)
 
     async def create(
         self,
@@ -131,6 +190,8 @@ class RunRecorder:
         self._nodes: dict[str, dict[str, Any]] = {}
         self._pending: dict[str, Any] = {}
         self._output_budget = RUN_OUTPUT_BUDGET
+        #: Characters of each node's stored output (given back when it's replaced).
+        self._output_sizes: dict[str, int] = {}
         self._wake = asyncio.Event()
         self._closing = False
         self._worker = asyncio.create_task(self._write_loop(), name=f"run-recorder:{run_id}")
@@ -141,7 +202,12 @@ class RunRecorder:
         if kind == "run_started":
             self._pending |= {"status": "running", "started_at": at}
         elif kind == "node_started":
-            self._set_node(event["node_id"], {"status": "running", "started_at": at})
+            # A node in a loop starts again: its entry describes the latest pass.
+            self._release_output(event["node_id"])
+            state: dict[str, Any] = {"status": "running", "started_at": at}
+            if event.get("iteration"):
+                state["iteration"] = event["iteration"]
+            self._set_node(event["node_id"], state)
         elif kind == "node_finished":
             state = {**self._nodes.get(event["node_id"], {}), "status": event["status"]}
             state["finished_at"] = at
@@ -149,13 +215,14 @@ class RunRecorder:
                 state["error"] = event["error"]
             if event["status"] == "succeeded":
                 state["handles"] = event.get("handles", [])
-                state |= self._encode_output(event.get("output"))
+                state |= self._encode_output(event["node_id"], event.get("output"))
             self._set_node(event["node_id"], state)
         elif kind == "tool_call":
             # A tool node's state is its latest call (+ how many calls it got).
             if not event["tool_node_id"]:
                 return  # the model called a tool that doesn't exist
             previous = self._nodes.get(event["tool_node_id"], {})
+            self._release_output(event["tool_node_id"])
             self._set_node(
                 event["tool_node_id"],
                 {"status": "running", "started_at": at, "calls": previous.get("calls", 0) + 1},
@@ -170,7 +237,7 @@ class RunRecorder:
             if event.get("error"):
                 state["error"] = event["error"]
             else:
-                state |= self._encode_output(event.get("output"))
+                state |= self._encode_output(event["tool_node_id"], event.get("output"))
             self._set_node(event["tool_node_id"], state)
         elif kind == "run_finished":
             self._pending |= {
@@ -187,16 +254,21 @@ class RunRecorder:
         # The whole entry, so a later write of the same node simply replaces it.
         self._pending[FieldPath("node_states", node_id).to_api_repr()] = state
 
-    def _encode_output(self, output: Any) -> dict[str, Any]:
+    def _release_output(self, node_id: str) -> None:
+        self._output_budget += self._output_sizes.pop(node_id, 0)
+
+    def _encode_output(self, node_id: str, output: Any) -> dict[str, Any]:
+        self._release_output(node_id)
         encoded = json.dumps(output, ensure_ascii=False, default=str)
         limit = min(OUTPUT_MAX_CHARS, self._output_budget)
         if len(encoded) <= limit:
-            self._output_budget -= len(encoded)
-            return {"output_json": encoded, "output_truncated": False}
-        preview = output if isinstance(output, str) else encoded
-        preview = preview[: max(limit, 0)]
-        self._output_budget -= len(preview)
-        return {"output_json": preview, "output_truncated": True}
+            stored, truncated = encoded, False
+        else:
+            preview = output if isinstance(output, str) else encoded
+            stored, truncated = preview[: max(limit, 0)], True
+        self._output_budget -= len(stored)
+        self._output_sizes[node_id] = len(stored)
+        return {"output_json": stored, "output_truncated": truncated}
 
     async def _write_loop(self) -> None:
         while True:

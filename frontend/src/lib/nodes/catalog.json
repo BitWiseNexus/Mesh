@@ -881,6 +881,7 @@
           "key": "operator",
           "label": "Operator",
           "kind": "select",
+          "help": "Text is compared ignoring upper/lower case and surrounding spaces. Greater / less than compare numbers.",
           "required": false,
           "templated": false,
           "options": [
@@ -972,7 +973,7 @@
           "key": "until",
           "label": "Stop when output contains",
           "kind": "text",
-          "help": "Leave empty to always run the maximum number of iterations.",
+          "help": "Checked on what comes back from the loop (ignoring upper/lower case). Leave empty to always run the maximum number of iterations.",
           "required": false,
           "templated": true
         }

@@ -4,7 +4,7 @@ They are streamed to the editor over SSE (`GET /runs/{id}/stream`) and drive per
 status transitions and outputs reach Firestore; tokens and logs are stream-only (context.md D2).
 
     run_started    {run_id, trigger_id}
-    node_started   {node_id}
+    node_started   {node_id, iteration?}                 iteration: inside a loop (1, 2, …)
     token          {node_id, text}                       streamed LLM output
     log            {node_id?, level, message}
     tool_call      {node_id, tool_node_id, call_id, name, arguments}
@@ -46,8 +46,9 @@ def run_started(run_id: str, trigger_id: str) -> RunEvent:
     return event("run_started", run_id=run_id, trigger_id=trigger_id)
 
 
-def node_started(node_id: str) -> RunEvent:
-    return event("node_started", node_id=node_id)
+def node_started(node_id: str, iteration: int | None = None) -> RunEvent:
+    """`iteration`: for steps inside a loop, which pass of the innermost loop this is (1, 2, …)."""
+    return event("node_started", node_id=node_id, iteration=iteration)
 
 
 def token(node_id: str, text: str) -> RunEvent:

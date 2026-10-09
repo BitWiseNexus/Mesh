@@ -185,15 +185,15 @@ def test_invalid_flows_are_refused_with_their_issues(client: TestClient) -> None
 
 def test_nodes_without_executors_are_refused(client: TestClient) -> None:
     flow = {
-        "name": "Branch",
-        "nodes": [node("t", "trigger_manual"), node("if", "logic_if", value="x")],
-        "edges": [edge("t", "if")],
+        "name": "Approval",
+        "nodes": [node("t", "trigger_manual"), node("ok", "hitl_approval")],
+        "edges": [edge("t", "ok")],
     }
     response = client.post(f"/flows/{create_flow(client, flow)}/runs", json={})
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail["code"] == "nodes_not_runnable"
-    assert [i["id"] for i in detail["issues"]] == ["not-runnable:if"]
+    assert [i["id"] for i in detail["issues"]] == ["not-runnable:ok"]
 
 
 def test_several_triggers_need_a_trigger_id(client: TestClient) -> None:
@@ -258,3 +258,88 @@ def test_runs_cut_off_by_a_restart_are_reported_as_interrupted(client: TestClien
     record = client.get(f"/runs/{created.run_id}").json()
     assert record["status"] == "failed"
     assert record["error"] == "The run was interrupted because the server restarted."
+
+
+def test_history_lists_a_flows_runs_newest_first(
+    client: TestClient, as_user: Callable[[str], None]
+) -> None:
+    flow_id = create_flow(client)
+    other_flow = create_flow(client)
+    first = start(client, flow_id, input="one")
+    read_stream(client, first["run_id"])
+    second = start(client, flow_id, input="two")
+    read_stream(client, second["run_id"])
+    start(client, other_flow)
+    wait_for_status(client, second["run_id"], "succeeded")
+
+    history = client.get(f"/flows/{flow_id}/runs").json()
+    assert [r["run_id"] for r in history] == [second["run_id"], first["run_id"]]
+    assert history[0]["status"] == "succeeded" and history[0]["flow_version"] == 1
+    assert "node_states" not in history[0]
+    assert [r["run_id"] for r in client.get(f"/flows/{flow_id}/runs?limit=1").json()] == [
+        second["run_id"]
+    ]
+    assert client.get(f"/flows/{flow_id}/runs?limit=0").status_code == 422
+
+    as_user("mallory")
+    response = client.get(f"/flows/{flow_id}/runs")
+    assert response.status_code == 404 and response.json()["detail"]["code"] == "flow_not_found"
+
+
+def test_history_shows_interrupted_runs_as_failed(client: TestClient) -> None:
+    flow_id = create_flow(client)
+    repository = RunRepository(get_db())
+    portal = client.portal  # type: ignore[union-attr]
+    created = portal.call(
+        lambda: repository.create(
+            owner_uid="alice", flow_id=flow_id, flow_version=1, trigger_id="t", input=None
+        )
+    )
+    portal.call(lambda: repository.update(created.run_id, {"status": "running"}))
+    [entry] = client.get(f"/flows/{flow_id}/runs").json()
+    assert entry["status"] == "failed" and "interrupted" in entry["error"]
+
+
+def test_deleting_a_flow_deletes_its_runs(client: TestClient) -> None:
+    flow_id = create_flow(client)
+    keep = create_flow(client)
+    run = start(client, flow_id)
+    kept_run = start(client, keep)
+    for r in (run, kept_run):
+        wait_for_status(client, r["run_id"], "succeeded")
+    assert client.delete(f"/flows/{flow_id}").status_code == 204
+    assert client.get(f"/runs/{run['run_id']}").status_code == 404
+    assert client.get(f"/runs/{kept_run['run_id']}").status_code == 200
+
+
+def test_loops_and_branches_run_through_the_api(client: TestClient) -> None:
+    flow = {
+        "name": "Loop",
+        "nodes": [
+            node("t", "trigger_manual", "trigger", input="go"),
+            node("l", "logic_loop", "loop", max_iterations=3),
+            node("a", "agent_node", "agent", model="mock/echo", prompt="{{input}}!"),
+            node("if", "logic_if", "check", operator="contains", value="!!!"),
+            node("yes", "output_display", "yes"),
+            node("no", "output_display", "no"),
+        ],
+        "edges": [
+            edge("t", "l"),
+            edge("l", "a", "loop"),
+            edge("a", "l"),
+            edge("l", "if", "done"),
+            edge("if", "yes", "true"),
+            edge("if", "no", "false"),
+        ],
+    }
+    run = start(client, create_flow(client, flow))
+    stream = read_stream(client, run["run_id"])
+    assert stream[-1]["status"] == "succeeded"
+    agent_passes = [
+        e["iteration"] for e in stream if e["type"] == "node_started" and e["node_id"] == "a"
+    ]
+    assert agent_passes == [1, 2, 3]
+    record = wait_for_status(client, run["run_id"], "succeeded")
+    states = record["node_states"]
+    assert states["yes"]["output"] == "go!!!" and states["no"]["status"] == "skipped"
+    assert states["a"]["iteration"] == 3 and states["l"]["handles"] == ["done"]

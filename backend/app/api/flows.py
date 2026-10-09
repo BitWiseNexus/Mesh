@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Path, Response, status
 from app.core.auth import CurrentUser
 from app.core.firebase import get_db
 from app.repositories.flows import FlowRepository
+from app.repositories.runs import RunRepository
 from app.schemas.flow import Flow
 from app.schemas.flows_api import FlowMetaUpdate, FlowSummary, FlowUpdate, StoredFlow
 
@@ -61,7 +62,9 @@ async def update_flow_meta(
 
 @router.delete("/{flow_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_flow(flow_id: FlowId, user: CurrentUser, repo: Repo) -> Response:
+    """Deletes the flow and its run history."""
     await repo.delete(user.uid, flow_id)
+    await RunRepository(get_db()).delete_for_flow(user.uid, flow_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

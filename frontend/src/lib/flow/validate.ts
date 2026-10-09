@@ -100,6 +100,7 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
   const attachedTools = new Set(toolEdges.map((e) => e.target));
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const inToolCycle = new Set(cycles(toolEdges).flat());
+  const links = resolvedLinks(dataEdges, byId);
   // Data cycles are only allowed through a Loop node, which bounds how often they repeat.
   const unboundedCycle = new Set(
     cycles(dataEdges)
@@ -173,16 +174,25 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
       });
     }
 
-    if (
-      node.type === "logic_loop" &&
-      !edges.some((e) => e.source === node.id && e.sourceHandle === "loop")
-    ) {
-      issues.push({
-        id: `empty-loop:${node.id}`,
-        severity: "warning",
-        nodeId: node.id,
-        message: `${name(node)} has nothing connected to its Loop output`,
-      });
+    if (node.type === "logic_loop") {
+      if (!edges.some((e) => e.source === node.id && e.sourceHandle === "loop")) {
+        issues.push({
+          id: `empty-loop:${node.id}`,
+          severity: "warning",
+          nodeId: node.id,
+          message: `${name(node)} has nothing connected to its Loop output`,
+        });
+      } else {
+        const body = loopBody(node.id, links);
+        if (!links.some((l) => body.has(l.source) && l.target === node.id)) {
+          issues.push({
+            id: `loop-no-return:${node.id}`,
+            severity: "warning",
+            nodeId: node.id,
+            message: `${name(node)}'s Loop output never leads back to it, so the loop runs only once`,
+          });
+        }
+      }
     }
 
     for (const field of def.fields) {
@@ -292,6 +302,40 @@ function ambiguousInput(
   return parseTemplate(value).some(
     (p) => p.kind === "input" && (p.path.length === 0 || !senderRefs.has(p.path[0])),
   );
+}
+
+interface Link {
+  source: string;
+  handle: string;
+  target: string;
+}
+
+/** Data edges with a null source handle resolved to the node's first output. */
+function resolvedLinks(dataEdges: CanvasEdge[], byId: Map<string, CanvasNode>): Link[] {
+  return dataEdges.flatMap((e) => {
+    const source = byId.get(e.source);
+    if (!source) return [];
+    const handle = findHandle(source, e.sourceHandle, "source")?.id ?? e.sourceHandle ?? "";
+    return [{ source: e.source, handle, target: e.target }];
+  });
+}
+
+/**
+ * The nodes a Loop repeats: everything reachable from its `loop` output without passing through
+ * the Loop itself (backend: app/engine/graph.py `loop_body`).
+ */
+function loopBody(loopId: string, links: Link[]): Set<string> {
+  const body = new Set<string>();
+  const queue = links
+    .filter((l) => l.source === loopId && l.handle === "loop" && l.target !== loopId)
+    .map((l) => l.target);
+  while (queue.length) {
+    const current = queue.pop()!;
+    if (body.has(current)) continue;
+    body.add(current);
+    for (const l of links) if (l.source === current && l.target !== loopId) queue.push(l.target);
+  }
+  return body;
 }
 
 /**

@@ -32,6 +32,8 @@ export interface NodeRun {
   toolCalls?: ToolCallRun[];
   /** Tools: how often they were called. */
   calls?: number;
+  /** Steps inside a loop: the current (or last) pass. */
+  iteration?: number;
 }
 
 export interface RunLogEntry {
@@ -55,6 +57,13 @@ export interface RunState {
   log: RunLogEntry[];
   startedAt: string | null;
   finishedAt: string | null;
+  /** When the run was created, and from which saved version of the flow. */
+  createdAt: string | null;
+  flowVersion: number | null;
+  /** Opened from the run history (not started in this session). */
+  fromHistory: boolean;
+  /** Counts runs shown (started or opened); the panel starts each one on its Output tab. */
+  view: number;
   panelOpen: boolean;
 }
 
@@ -68,6 +77,10 @@ export const IDLE_RUN: RunState = {
   log: [],
   startedAt: null,
   finishedAt: null,
+  createdAt: null,
+  flowVersion: null,
+  fromHistory: false,
+  view: 0,
   panelOpen: false,
 };
 
@@ -102,7 +115,7 @@ export function applyRunEvent(state: RunState, event: RunEvent): RunState {
     case "node_started":
       return withNode(
         event.node_id,
-        { status: "running", startedAt: event.at, text: "" },
+        { status: "running", startedAt: event.at, text: "", iteration: event.iteration },
         { at: event.at, level: "info", nodeId: event.node_id, message: "started" },
       );
     case "token":
@@ -262,6 +275,7 @@ export function fromRunInfo(state: RunState, run: RunInfo): RunState {
       startedAt: s.started_at ?? undefined,
       finishedAt: s.finished_at ?? undefined,
       ...(s.calls ? { calls: s.calls } : {}),
+      ...(s.iteration ? { iteration: s.iteration } : {}),
     };
   }
   return {
@@ -273,6 +287,8 @@ export function fromRunInfo(state: RunState, run: RunInfo): RunState {
     order: ids,
     startedAt: run.started_at,
     finishedAt: run.finished_at,
+    createdAt: run.created_at,
+    flowVersion: run.flow_version,
   };
 }
 
@@ -280,6 +296,8 @@ interface RunStore extends RunState {
   /** Starts tracking a run of `flowId` (the panel opens). */
   begin: (flowId: string) => void;
   attach: (run: RunInfo) => void;
+  /** Shows a past run of `flowId` (from the history) on the canvas and in the panel. */
+  showRun: (flowId: string, run: RunInfo) => void;
   apply: (event: RunEvent) => void;
   /** The run couldn't start or the stream was lost: finish with an error (+ details for the log). */
   fail: (message: string, details?: string[]) => void;
@@ -289,8 +307,22 @@ interface RunStore extends RunState {
 
 export const useRunStore = create<RunStore>()((set, get) => ({
   ...IDLE_RUN,
-  begin: (flowId) => set({ ...IDLE_RUN, flowId, phase: "starting", panelOpen: true }),
-  attach: (run) => set({ runId: run.run_id, phase: run.status }),
+  begin: (flowId) =>
+    set({ ...IDLE_RUN, flowId, phase: "starting", panelOpen: true, view: get().view + 1 }),
+  attach: (run) =>
+    set({
+      runId: run.run_id,
+      phase: run.status,
+      createdAt: run.created_at,
+      flowVersion: run.flow_version,
+    }),
+  showRun: (flowId, run) =>
+    set(
+      fromRunInfo(
+        { ...IDLE_RUN, flowId, fromHistory: true, panelOpen: true, view: get().view + 1 },
+        run,
+      ),
+    ),
   apply: (event) => set(applyRunEvent(get(), event)),
   fail: (message, details = []) => {
     const at = new Date().toISOString();
@@ -301,7 +333,7 @@ export const useRunStore = create<RunStore>()((set, get) => ({
     });
   },
   setPanelOpen: (panelOpen) => set({ panelOpen }),
-  reset: () => set(IDLE_RUN),
+  reset: () => set({ ...IDLE_RUN, view: get().view + 1 }), // the counter only goes up
 }));
 
 /** How a data edge looks during/after a run: carrying data right now, delivered, or skipped. */

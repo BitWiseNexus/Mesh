@@ -420,6 +420,44 @@
       }
     },
     {
+      "name": "a loop whose body never leads back to it",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "l", "type": "logic_loop" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [
+        { "from": "t", "to": "l" },
+        { "from": "l", "to": "a", "handle": "loop" },
+        { "from": "a", "to": "out" }
+      ],
+      "errors": [],
+      "warnings": ["loop-no-return:l"],
+      "messages": {
+        "loop-no-return:l": "“Loop”'s Loop output never leads back to it, so the loop runs only once"
+      }
+    },
+    {
+      "name": "a loop body with a side branch still comes back",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "l", "type": "logic_loop" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "log", "type": "output_display" },
+        { "id": "out", "type": "output_display" }
+      ],
+      "edges": [
+        { "from": "t", "to": "l" },
+        { "from": "l", "to": "a", "handle": "loop" },
+        { "from": "a", "to": "log" },
+        { "from": "a", "to": "l" },
+        { "from": "l", "to": "out", "handle": "done" }
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    {
       "name": "a cycle through a Loop node",
       "nodes": [
         { "id": "t", "type": "trigger_manual" },

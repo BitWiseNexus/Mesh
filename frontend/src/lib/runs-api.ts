@@ -18,6 +18,20 @@ export interface NodeRunState {
   handles: string[] | null;
   /** Tools: how often the agent called it (the other fields describe the latest call). */
   calls?: number | null;
+  /** Steps inside a loop: the pass this entry is from (the latest one). */
+  iteration?: number | null;
+}
+
+/** A run in a flow's history (no node states). */
+export interface RunSummary {
+  run_id: string;
+  flow_version: number;
+  status: RunStatus;
+  trigger_id: string;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface RunInfo {
@@ -41,7 +55,12 @@ interface Stamped {
 
 export type RunEvent =
   | (Stamped & { type: "run_started"; run_id: string; trigger_id: string })
-  | (Stamped & { type: "node_started"; node_id: string })
+  | (Stamped & {
+      type: "node_started";
+      node_id: string;
+      /** Inside a loop: which pass of the innermost loop (1, 2, …). */
+      iteration?: number;
+    })
   | (Stamped & { type: "token"; node_id: string; text: string })
   | (Stamped & {
       type: "log";
@@ -91,6 +110,9 @@ export function runsApi(api: ApiClient) {
     start: (flowId: string, body: RunRequest = {}) =>
       api.post<RunInfo>(`/flows/${encodeURIComponent(flowId)}/runs`, body),
     get: (runId: string) => api.get<RunInfo>(path(runId)),
+    /** The flow's latest runs, newest first. */
+    list: (flowId: string, limit = 25) =>
+      api.get<RunSummary[]>(`/flows/${encodeURIComponent(flowId)}/runs?limit=${limit}`),
     cancel: (runId: string) => api.post<RunInfo>(`${path(runId)}/cancel`),
     /** One connection to the run's event stream; resolves when the server ends it. */
     async stream(
@@ -113,6 +135,10 @@ export function runsApi(api: ApiClient) {
     },
   };
 }
+
+export const runKeys = {
+  list: (flowId: string) => ["runs", flowId] as const,
+};
 
 const isFinished = (event: RunEvent) => event.type === "run_finished" || event.type === "snapshot";
 
