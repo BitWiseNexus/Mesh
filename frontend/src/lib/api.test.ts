@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { API_URL, ApiError, createApiClient } from "./api";
+import { API_URL, ApiError, AUTH_UNAVAILABLE, createApiClient, NETWORK_ERROR } from "./api";
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -95,6 +95,36 @@ describe("createApiClient", () => {
     await expect(response.text()).resolves.toBe("data: x\n\n");
     expect(authHeader(1)).toBe("Bearer t2");
     await expect(api.fetch("/runs/r/stream")).rejects.toMatchObject({ code: "run_not_found" });
+  });
+
+  it("explains an unreachable server instead of failing silently", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch"); // server down, or a response without CORS headers
+    });
+    const api = createApiClient(async () => "t1", fetchMock as unknown as typeof fetch);
+    const error = (await api.get("/flows").catch((e) => e)) as ApiError;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 0, code: NETWORK_ERROR });
+    expect(error.message).toContain(`Can't reach the Mesh server at ${API_URL}`);
+  });
+
+  it("explains a sign-in that can't be refreshed", async () => {
+    const fetchMock = vi.fn();
+    const api = createApiClient(async () => {
+      throw new Error("auth/network-request-failed");
+    }, fetchMock as unknown as typeof fetch);
+    const error = (await api.get("/flows").catch((e) => e)) as ApiError;
+    expect(error).toMatchObject({ status: 0, code: AUTH_UNAVAILABLE });
+    expect(error.message).toContain("Couldn't confirm your sign-in");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("lets aborted requests stay aborts", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new DOMException("aborted", "AbortError");
+    });
+    const api = createApiClient(async () => "t1", fetchMock as unknown as typeof fetch);
+    await expect(api.fetch("/runs/r/stream")).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("returns undefined for 204 No Content", async () => {

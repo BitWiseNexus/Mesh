@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Tolerate small clock differences between this server and Google when checking token times.
     auth_clock_skew_seconds: int = Field(default=10, ge=0, le=60)
 
+    #: API requests that take longer get 503 `server_timeout` (event streams are exempt).
+    request_timeout_seconds: float = Field(default=20, gt=0)
+
     # Runs. Live runs (tasks + event streams) are held in this process: run a single backend
     # instance until runs move to a worker queue.
     run_timeout_seconds: int = Field(default=600, ge=1)

@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.crypto import get_cipher
 from app.core.errors import register_error_handlers
 from app.core.firebase import init_firebase
+from app.core.middleware import ErrorGuardMiddleware
 from app.services.runs import RunManager
 
 
@@ -29,6 +30,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
 
+    # Inside CORS (middleware added later wraps earlier), so its error responses get CORS headers.
+    app.add_middleware(ErrorGuardMiddleware, timeout=settings.request_timeout_seconds)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

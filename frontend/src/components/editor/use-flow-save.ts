@@ -13,8 +13,14 @@ import { useFlowStore } from "@/stores/flow-store";
 
 /** Errors a retry can fix: network failures, timeouts, rate limits and server errors. */
 export function isRetryable(error: unknown): boolean {
-  if (!(error instanceof ApiError)) return true; // fetch threw → network/CORS/offline
-  return error.status >= 500 || error.status === 408 || error.status === 429 || error.status === 401;
+  if (!(error instanceof ApiError)) return true;
+  return (
+    error.status === 0 || // no response: network/CORS/offline, or sign-in service unreachable
+    error.status >= 500 ||
+    error.status === 408 ||
+    error.status === 429 ||
+    error.status === 401
+  );
 }
 
 /**

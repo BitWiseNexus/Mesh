@@ -30,8 +30,9 @@ uv sync --project backend
 npm run dev
 ```
 
-`npm run dev` starts the Firebase emulators, the backend and the frontend together (Ctrl+C stops
-all of them). Services already running in another terminal are reused.
+`npm run dev` starts the Firebase emulators, the backend and the frontend, one after another —
+open the app once it prints **Ready** (Ctrl+C stops all of them). Services already running in
+another terminal are reused, and an emulator left over from an earlier session is stopped first.
 
 | URL | |
 |---|---|

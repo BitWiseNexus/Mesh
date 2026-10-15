@@ -59,6 +59,20 @@ export interface ApiClient {
   delete: <T = void>(path: string) => Promise<T>;
 }
 
+/** No response at all: the server is down, unreachable, or answered without CORS headers. */
+export const NETWORK_ERROR = "network_error";
+/** The signed-in user's token couldn't be obtained (the sign-in service didn't answer). */
+export const AUTH_UNAVAILABLE = "auth_unavailable";
+
+const networkError = () =>
+  new ApiError(
+    0,
+    NETWORK_ERROR,
+    `Can't reach the Mesh server at ${API_URL}. Check your connection — when developing, check that the backend is running (npm run dev).`,
+  );
+
+const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
+
 /** Codes after which a freshly minted ID token may succeed. */
 const RETRYABLE_AUTH_CODES = new Set(["token_expired", "invalid_token"]);
 
@@ -68,14 +82,29 @@ const RETRYABLE_AUTH_CODES = new Set(["token_expired", "invalid_token"]);
  */
 export function createApiClient(getIdToken: GetIdToken, fetchImpl: typeof fetch = fetch): ApiClient {
   const send = async (path: string, init: RequestInit, forceRefresh: boolean) => {
-    const token = await getIdToken(forceRefresh);
+    let token: string | null;
+    try {
+      token = await getIdToken(forceRefresh);
+    } catch {
+      // Refreshing the token failed without an answer (offline, or the Auth emulator is down).
+      throw new ApiError(
+        0,
+        AUTH_UNAVAILABLE,
+        "Couldn't confirm your sign-in: the sign-in service didn't answer. Try again, or sign in again — when developing, check that the Firebase emulators are running.",
+      );
+    }
     if (!token) throw new ApiError(401, "missing_token", "Sign in to continue.");
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
     if (init.body !== undefined && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    return fetchImpl(`${API_URL}${path}`, { ...init, headers });
+    try {
+      return await fetchImpl(`${API_URL}${path}`, { ...init, headers });
+    } catch (error) {
+      if (isAbort(error)) throw error;
+      throw networkError();
+    }
   };
 
   /** Sends with the current token; on an expired/invalid one, refreshes it and retries once. */

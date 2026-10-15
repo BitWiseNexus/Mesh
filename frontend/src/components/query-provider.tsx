@@ -12,7 +12,9 @@ function makeQueryClient() {
         staleTime: 30_000,
         // Client errors (401/403/404/422…) won't fix themselves on retry.
         retry: (failureCount, error) =>
-          !(error instanceof ApiError && error.status < 500) && failureCount < 2,
+          // 4xx won't change on retry; network failures (status 0) and 5xx might.
+          !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+          failureCount < 2,
       },
     },
   });

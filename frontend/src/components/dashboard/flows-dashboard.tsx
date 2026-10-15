@@ -10,7 +10,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError } from "@/lib/api";
+import { ApiError, AUTH_UNAVAILABLE } from "@/lib/api";
 import { parseFlowJson } from "@/lib/flow/graph";
 import { createFlowFromTemplate } from "@/lib/flow/templates";
 import { toFlowContent, type FlowSummary } from "@/lib/flows-api";
@@ -91,6 +91,7 @@ function EmptyState({ onCreate, creating }: { onCreate: () => void; creating: bo
 
 export function FlowsDashboard() {
   const router = useRouter();
+  const { signOut } = useAuth();
   const flows = useFlowList();
   const createFlow = useCreateFlow();
   const duplicateFlow = useDuplicateFlow();
@@ -219,10 +220,19 @@ export function FlowsDashboard() {
           >
             <AlertCircle className="size-6 text-destructive" />
             <p className="font-medium">Couldn&apos;t load your flows</p>
-            <p className="text-sm text-muted-foreground">{errorMessage(flows.error, "")}</p>
-            <Button variant="outline" onClick={() => void flows.refetch()}>
-              Try again
-            </Button>
+            <p className="max-w-md text-sm text-muted-foreground">
+              {errorMessage(flows.error, "Something went wrong. Please try again.")}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void flows.refetch()}>
+                Try again
+              </Button>
+              {flows.error instanceof ApiError && flows.error.code === AUTH_UNAVAILABLE && (
+                <Button variant="outline" onClick={() => void signOut()}>
+                  Sign in again
+                </Button>
+              )}
+            </div>
           </div>
         ) : count === 0 ? (
           <EmptyState onCreate={newFlow} creating={createFlow.isPending} />
