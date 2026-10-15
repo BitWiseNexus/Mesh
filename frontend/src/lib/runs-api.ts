@@ -5,8 +5,37 @@
 import type { ApiClient } from "@/lib/api";
 import { createSseParser } from "@/lib/sse";
 
-export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type NodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
+export type RunStatus = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled";
+export type NodeRunStatus =
+  | "pending"
+  | "running"
+  | "waiting"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+/** An Approval Gate waiting for a reviewer. */
+export interface PendingApproval {
+  node_id: string;
+  message: string;
+  /** What reached the gate (a text preview when `content_truncated`). */
+  content: unknown;
+  content_truncated: boolean;
+  /** The reviewer may change the content before approving. */
+  allow_edit: boolean;
+  requested_at: string;
+}
+
+/** An approval waiting for the user, in any of their flows (`GET /approvals`). */
+export interface PendingApprovalItem {
+  run_id: string;
+  flow_id: string;
+  flow_name: string;
+  node_id: string;
+  message: string;
+  requested_at: string;
+}
 
 export interface NodeRunState {
   status: NodeRunStatus;
@@ -37,6 +66,7 @@ export interface RunSummary {
 export interface RunInfo {
   run_id: string;
   flow_id: string;
+  flow_name?: string;
   flow_version: number;
   status: RunStatus;
   trigger_id: string;
@@ -46,6 +76,8 @@ export interface RunInfo {
   started_at: string | null;
   finished_at: string | null;
   node_states: Record<string, NodeRunState>;
+  /** Status `paused`: the gates waiting for a reviewer. */
+  pending_approvals?: PendingApproval[];
 }
 
 interface Stamped {
@@ -96,6 +128,17 @@ export type RunEvent =
       error?: string;
     })
   | (Stamped & { type: "run_finished"; status: Exclude<RunStatus, "queued" | "running">; error?: string })
+  | (Stamped & {
+      type: "approval_requested";
+      node_id: string;
+      message: string;
+      content: unknown;
+      allow_edit: boolean;
+    })
+  | (Stamped & { type: "approval_decided"; node_id: string; approved: boolean; edited: boolean })
+  /** Nothing else can run until someone answers the pending approvals. Ends the stream. */
+  | (Stamped & { type: "run_paused"; pending: string[] })
+  | (Stamped & { type: "run_resumed" })
   /** Sent instead of events when the run is no longer live on the server. */
   | { type: "snapshot"; run: RunInfo };
 
@@ -114,6 +157,12 @@ export function runsApi(api: ApiClient) {
     list: (flowId: string, limit = 25) =>
       api.get<RunSummary[]>(`/flows/${encodeURIComponent(flowId)}/runs?limit=${limit}`),
     cancel: (runId: string) => api.post<RunInfo>(`${path(runId)}/cancel`),
+    /** Answers a waiting Approval Gate; the run continues (follow its stream). Pass `content`
+     *  only to continue with an edited version. */
+    answer: (runId: string, nodeId: string, body: { approved: boolean; content?: unknown }) =>
+      api.post<RunInfo>(`${path(runId)}/approvals/${encodeURIComponent(nodeId)}`, body),
+    /** Everything waiting for the user's approval, oldest first. */
+    approvals: () => api.get<PendingApprovalItem[]>("/approvals"),
     /** One connection to the run's event stream; resolves when the server ends it. */
     async stream(
       runId: string,
@@ -138,9 +187,11 @@ export function runsApi(api: ApiClient) {
 
 export const runKeys = {
   list: (flowId: string) => ["runs", flowId] as const,
+  approvals: ["approvals"] as const,
 };
 
-const isFinished = (event: RunEvent) => event.type === "run_finished" || event.type === "snapshot";
+const isFinished = (event: RunEvent) =>
+  event.type === "run_finished" || event.type === "run_paused" || event.type === "snapshot";
 
 /**
  * Follows a run until it finishes, reconnecting (with Last-Event-ID, so nothing is lost or

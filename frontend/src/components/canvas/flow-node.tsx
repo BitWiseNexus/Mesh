@@ -1,7 +1,16 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Check, CircleAlert, Loader2, Minus, Square, TriangleAlert, X } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  Hourglass,
+  Loader2,
+  Minus,
+  Square,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { memo, type CSSProperties } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -79,10 +88,12 @@ const RUN_OUTLINE: Partial<Record<NodeRunStatus, string>> = {
   succeeded: "outline-2 outline-offset-2 outline-emerald-500",
   failed: "outline-2 outline-offset-2 outline-destructive",
   cancelled: "outline-2 outline-offset-2 outline-dashed outline-muted-foreground",
+  waiting: "outline-2 outline-offset-2 outline-amber-500",
 };
 
 const RUN_LABEL: Record<NodeRunStatus, string> = {
-  pending: "Waiting",
+  pending: "Pending",
+  waiting: "Waiting for approval",
   running: "Running",
   succeeded: "Succeeded",
   failed: "Failed",
@@ -91,7 +102,15 @@ const RUN_LABEL: Record<NodeRunStatus, string> = {
 };
 
 function RunStatusBadge({ status }: { status: NodeRunStatus }) {
-  const Icon = { running: Loader2, succeeded: Check, failed: X, skipped: Minus, cancelled: Square, pending: Minus }[status];
+  const Icon = {
+    running: Loader2,
+    waiting: Hourglass,
+    succeeded: Check,
+    failed: X,
+    skipped: Minus,
+    cancelled: Square,
+    pending: Minus,
+  }[status];
   return (
     <span
       role="img"
@@ -100,6 +119,7 @@ function RunStatusBadge({ status }: { status: NodeRunStatus }) {
       className={cn(
         "absolute -top-2 -left-2 flex size-5 items-center justify-center rounded-full border bg-background shadow-sm",
         status === "running" && "text-sky-500",
+        status === "waiting" && "text-amber-600 dark:text-amber-500",
         status === "succeeded" && "text-emerald-600 dark:text-emerald-500",
         status === "failed" && "text-destructive",
         (status === "skipped" || status === "cancelled" || status === "pending") && "text-muted-foreground",

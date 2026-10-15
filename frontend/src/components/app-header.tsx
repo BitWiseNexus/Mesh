@@ -3,6 +3,7 @@
 import { Waypoints } from "lucide-react";
 import Link from "next/link";
 
+import { ApprovalsMenu } from "@/components/approvals-menu";
 import { UserMenu } from "@/components/auth/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -19,6 +20,7 @@ export function AppHeader() {
         Mesh
       </Link>
       <div className="ml-auto flex items-center gap-2">
+        <ApprovalsMenu />
         <ThemeToggle />
         <UserMenu />
       </div>

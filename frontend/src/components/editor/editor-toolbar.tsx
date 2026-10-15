@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useRef, type ChangeEvent, type MouseEvent } from "react";
 import { toast } from "sonner";
 
+import { ApprovalsMenu } from "@/components/approvals-menu";
 import { UserMenu } from "@/components/auth/user-menu";
 import { FIT_VIEW_OPTIONS } from "@/components/canvas/flow-canvas";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -198,6 +199,7 @@ export function EditorToolbar({
         <RunHistoryMenu onShow={onShowRun} />
         <RunButton onRun={onRun} onStop={onStop} />
         <Separator orientation="vertical" className="mx-1 h-5" />
+        <ApprovalsMenu />
         <UserMenu />
       </div>
     </header>

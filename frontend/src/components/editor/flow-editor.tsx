@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactFlowProvider } from "@xyflow/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -55,6 +56,18 @@ function useEditorShortcuts(save: () => void, run: () => void) {
   }, [save, run]);
 }
 
+/** `?run=<id>` (e.g. from the approvals menu): shows that run once the editor is open. */
+function useRunFromUrl(show: (runId: string) => Promise<void>) {
+  const runId = useSearchParams().get("run");
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    if (!runId) return;
+    void show(runId);
+    router.replace(pathname); // a reload shouldn't reopen it
+  }, [runId, show, router, pathname]);
+}
+
 function EditorLayout() {
   const { save, loadLatest } = useFlowSave();
   useAutosave(save);
@@ -69,7 +82,8 @@ function EditorLayout() {
     }
     if (dirty || state.status === "error") void save();
   }, [save]);
-  const { start, stop, follow, show } = useRun();
+  const { start, stop, follow, show, answer } = useRun();
+  useRunFromUrl(show);
   useRunLifecycle(follow);
   /** Ctrl+Enter: run when the flow is valid, has one trigger and nothing is running. */
   const runShortcut = useCallback(() => {
@@ -111,7 +125,7 @@ function EditorLayout() {
           <div className="relative min-h-0 flex-1">
             <FlowCanvas />
           </div>
-          <RunPanel />
+          <RunPanel onAnswer={answer} onStop={() => void stop()} />
         </main>
         <NodeConfigPanel />
       </div>

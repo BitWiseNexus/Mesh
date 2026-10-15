@@ -458,6 +458,50 @@
       "warnings": []
     },
     {
+      "name": "a loop only reached from inside itself can't start (user report: retry wiring)",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "a", "type": "agent_node" },
+        { "id": "check", "type": "logic_if", "data": { "operator": "less_than", "value": "5" } },
+        { "id": "result", "type": "output_display" },
+        { "id": "l", "type": "logic_loop" }
+      ],
+      "edges": [
+        { "from": "t", "to": "a" },
+        { "from": "a", "to": "check" },
+        { "from": "check", "to": "result", "handle": "true" },
+        { "from": "check", "to": "l", "handle": "false" },
+        { "from": "l", "to": "a", "handle": "loop" },
+        { "from": "l", "to": "result", "handle": "done" }
+      ],
+      "errors": ["loop-not-entered:l"],
+      "warnings": ["ambiguous-input:a:prompt"],
+      "messages": {
+        "loop-not-entered:l": "“Loop” is only reached from inside its own loop, so it can't start — connect the flow into the Loop first, and the steps to repeat to its Loop output"
+      }
+    },
+    {
+      "name": "retry until it fits: enter the Loop first, leave the loop when the answer fits",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "l", "type": "logic_loop" },
+        { "id": "a", "type": "agent_node", "data": { "prompt": "{{t.output}}" } },
+        { "id": "check", "type": "logic_if", "data": { "operator": "less_than", "value": "5" } },
+        { "id": "result", "type": "output_display" },
+        { "id": "gave_up", "type": "output_display" }
+      ],
+      "edges": [
+        { "from": "t", "to": "l" },
+        { "from": "l", "to": "a", "handle": "loop" },
+        { "from": "a", "to": "check" },
+        { "from": "check", "to": "result", "handle": "true" },
+        { "from": "check", "to": "l", "handle": "false" },
+        { "from": "l", "to": "gave_up", "handle": "done" }
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    {
       "name": "a cycle through a Loop node",
       "nodes": [
         { "id": "t", "type": "trigger_manual" },

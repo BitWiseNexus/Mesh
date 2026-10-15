@@ -15,6 +15,11 @@ status transitions and outputs reach Firestore; tokens and logs are stream-only 
                    status: succeeded | failed | skipped | cancelled
                    handles: the output handles that delivered (others were skipped)
     run_finished   {status, error?}                      status: succeeded | failed | cancelled
+    approval_requested {node_id, message, content, allow_edit}   an Approval Gate waits
+    approval_decided   {node_id, approved, edited}               a reviewer answered (resume)
+    run_paused     {pending}                             nothing else can run until someone
+                                                         answers the pending approvals (node ids)
+    run_resumed    {}                                    a paused run continues
 
 Every event also has `type` and `at` (ISO-8601 UTC); the event log adds `seq` (1, 2, …).
 """
@@ -27,11 +32,13 @@ RunEvent = dict[str, Any]
 #: Receives events synchronously, in order. Must not block (no I/O): buffer and write elsewhere.
 EventSink = Callable[[RunEvent], None]
 
-NodeStatus = Literal["pending", "running", "succeeded", "failed", "skipped", "cancelled"]
-RunStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
+NodeStatus = Literal["pending", "running", "waiting", "succeeded", "failed", "skipped", "cancelled"]
+RunStatus = Literal["queued", "running", "paused", "succeeded", "failed", "cancelled"]
 LogLevel = Literal["info", "warning", "error"]
 
 FINISHED_RUN_STATUSES: frozenset[str] = frozenset({"succeeded", "failed", "cancelled"})
+#: Not executing anywhere: finished, or paused (its state is saved and nothing runs until resumed).
+SETTLED_RUN_STATUSES: frozenset[str] = FINISHED_RUN_STATUSES | {"paused"}
 
 
 def now_iso() -> str:
@@ -105,6 +112,23 @@ def node_finished(
         # `output` is kept even when None ("succeeded without output").
         finished |= {"output": output, "handles": handles or []}
     return finished
+
+
+def approval_requested(node_id: str, message: str, content: Any, allow_edit: bool) -> RunEvent:
+    requested = event("approval_requested", node_id=node_id, message=message, allow_edit=allow_edit)
+    return requested | {"content": content}  # kept even when None
+
+
+def approval_decided(node_id: str, approved: bool, edited: bool) -> RunEvent:
+    return event("approval_decided", node_id=node_id, approved=approved, edited=edited)
+
+
+def run_paused(pending: list[str]) -> RunEvent:
+    return event("run_paused", pending=pending)
+
+
+def run_resumed() -> RunEvent:
+    return event("run_resumed")
 
 
 def run_finished(status: RunStatus, error: str | None = None) -> RunEvent:

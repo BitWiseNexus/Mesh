@@ -14,14 +14,15 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from typing import Any
 
 from app.core.config import Settings
 from app.engine import events
 from app.engine.compiler import ExecutionPlan
 from app.engine.context import Secrets
 from app.engine.events import RunEvent
-from app.engine.runner import Runner
-from app.repositories.runs import RunRecorder, RunRepository
+from app.engine.runner import Decision, Runner
+from app.repositories.runs import CheckpointTooLargeError, RunRecorder, RunRepository
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,19 @@ class RunManager:
     def active_runs(self, owner_uid: str) -> int:
         return sum(1 for r in self._live.values() if r.owner_uid == owner_uid and not r.finished)
 
+    def reserve(self, run_id: str, owner_uid: str) -> LiveRun:
+        """Registers a run as live before it's started (e.g. while a paused run is loaded to be
+        resumed), so it isn't mistaken for one cut off by a restart in the meantime."""
+        live = LiveRun(run_id=run_id, owner_uid=owner_uid, log=RunEventLog())
+        self._live[run_id] = live
+        return live
+
+    def release(self, run_id: str) -> None:
+        """Drops a reservation that didn't lead to a start."""
+        live = self._live.get(run_id)
+        if live is not None and live.task is None:
+            del self._live[run_id]
+
     def start(
         self,
         *,
@@ -105,8 +119,14 @@ class RunManager:
         input: str | None,
         repository: RunRepository,
         secrets: Secrets | None = None,
+        flow_snapshot: dict[str, Any] | None = None,
+        checkpoint: dict[str, Any] | None = None,
+        decisions: list[Decision] | None = None,
+        reserved: LiveRun | None = None,
     ) -> LiveRun:
-        live = LiveRun(run_id=run_id, owner_uid=owner_uid, log=RunEventLog())
+        """Runs `plan` in the background. `flow_snapshot` (the flow as run) is saved with the
+        checkpoint if the run pauses; `checkpoint` + `decisions` resume a paused run."""
+        live = reserved or LiveRun(run_id=run_id, owner_uid=owner_uid, log=RunEventLog())
         recorder = RunRecorder(repository, run_id)
 
         def sink(event: RunEvent) -> None:
@@ -120,13 +140,30 @@ class RunManager:
             sink=sink,
             timeout=self.settings.run_timeout_seconds,
             secrets=secrets,
+            checkpoint=(checkpoint or {}).get("state"),
+            decisions=decisions,
         )
 
         live.runner_task = asyncio.create_task(runner.run(), name=f"run:{run_id}")
 
         async def execute() -> None:
             try:
-                await live.runner_task
+                outcome = await live.runner_task
+                if outcome.status == "paused":
+                    # Saved before the pause is reported: a paused run can always be resumed.
+                    await repository.save_checkpoint(
+                        run_id,
+                        {
+                            "flow": flow_snapshot or (checkpoint or {}).get("flow"),
+                            "trigger_id": plan.trigger_id,
+                            "state": outcome.checkpoint,
+                        },
+                    )
+                    sink(events.run_paused(sorted(outcome.checkpoint["pending"])))
+                elif checkpoint is not None:
+                    await repository.delete_checkpoint(run_id)  # resumed and finished
+            except CheckpointTooLargeError as exc:
+                sink(events.run_finished("failed", f"The run couldn't wait for approval: {exc}"))
             except Exception:  # Runner.run reports failures itself; this is a bug
                 logger.exception("Run %s crashed", run_id)
                 sink(events.run_finished("failed", "Internal error while running the flow"))
@@ -134,15 +171,20 @@ class RunManager:
                 live.finished = True
                 await recorder.close()
                 live.log.close()
-                self._forget_later(run_id)
+                self._forget_later(live)
 
         live.task = asyncio.create_task(execute(), name=f"run-main:{run_id}")
         self._live[run_id] = live
         return live
 
-    def _forget_later(self, run_id: str) -> None:
+    def _forget_later(self, live: LiveRun) -> None:
+        def forget() -> None:
+            # Only this run's entry: a paused run resumed meanwhile has a new one.
+            if self._live.get(live.run_id) is live:
+                del self._live[live.run_id]
+
         delay = self.settings.run_events_retention_seconds
-        asyncio.get_running_loop().call_later(delay, self._live.pop, run_id, None)
+        asyncio.get_running_loop().call_later(delay, forget)
 
     async def cancel(self, run_id: str) -> None:
         """Stops a live run and waits (up to CANCEL_WAIT_SECONDS) until it is recorded."""

@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test";
 
 import {
-  APPROVAL_FIXTURE,
   ECHO_FIXTURE,
   expect,
   importFixture,
@@ -119,20 +118,4 @@ test("an agent calls tools: another agent and an API", async ({ editor, page }) 
   const log = runPanel(page).getByRole("list", { name: "Run log" });
   await expect(log).toContainText("calls writer");
   await expect(log).toContainText("health_api returned");
-});
-
-test("explains why a flow can't run yet", async ({ editor, page }) => {
-  await editor.open();
-  page.removeAllListeners("console"); // the browser logs the expected 422 as a console error
-  await importFixture(editor, APPROVAL_FIXTURE, 3);
-  await editor.readyToRun();
-  await runButton(page).click();
-
-  await expect(runStatus(page)).toHaveText("Failed");
-  await expect(page.locator("#run-error")).toHaveText("Some nodes in this flow can't run yet.");
-  await runPanel(page).getByRole("tab", { name: "Logs" }).click();
-  await expect(runPanel(page).getByRole("list", { name: "Run log" })).toContainText(
-    "“Approval Gate”: Approval Gate nodes can't run yet",
-  );
-  await expect(runButton(page)).toBeEnabled();
 });

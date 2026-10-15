@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, Loader2, Minus, Square, Wrench, X } from "lucide-react";
+import { Check, Hourglass, Loader2, Minus, Square, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ApprovalCard, type AnswerApproval } from "./approval-card";
 import { formatRelativeTime } from "@/lib/format";
 import { NODE_REGISTRY, nodeDisplayName } from "@/lib/nodes/registry";
 import type { NodeRunStatus } from "@/lib/runs-api";
@@ -30,6 +31,7 @@ const PHASE: Record<RunPhase, { label: string; className: string }> = {
   starting: { label: "Starting…", className: "text-sky-600 dark:text-sky-400" },
   queued: { label: "Starting…", className: "text-sky-600 dark:text-sky-400" },
   running: { label: "Running…", className: "text-sky-600 dark:text-sky-400" },
+  paused: { label: "Waiting for approval", className: "text-amber-600 dark:text-amber-500" },
   succeeded: { label: "Succeeded", className: "text-emerald-600 dark:text-emerald-500" },
   failed: { label: "Failed", className: "text-destructive" },
   cancelled: { label: "Stopped", className: "text-muted-foreground" },
@@ -44,6 +46,8 @@ function StatusIcon({ status, className }: { status: NodeRunStatus; className?: 
       return <Check {...props} className={cn(props.className, "text-emerald-600 dark:text-emerald-500")} />;
     case "failed":
       return <X {...props} className={cn(props.className, "text-destructive")} />;
+    case "waiting":
+      return <Hourglass {...props} className={cn(props.className, "text-amber-600 dark:text-amber-500")} />;
     case "cancelled":
       return <Square {...props} className={cn(props.className, "text-muted-foreground")} />;
     default:
@@ -188,7 +192,27 @@ function NodeOutput({ id, run, name, type }: { id: string; run: NodeRun; name: s
   );
 }
 
-function OutputTab() {
+function Approvals({ onAnswer }: { onAnswer: AnswerApproval }) {
+  const approvals = useRunStore((s) => s.approvals);
+  const info = useNodeInfo();
+  const ids = Object.keys(approvals);
+  if (ids.length === 0) return null;
+  return (
+    <div className="mb-2 flex flex-col gap-2">
+      {ids.map((id) => (
+        <ApprovalCard
+          key={`${id}:${approvals[id].requestedAt}`}
+          nodeId={id}
+          name={info[id]?.name ?? id}
+          request={approvals[id]}
+          onAnswer={onAnswer}
+        />
+      ))}
+    </div>
+  );
+}
+
+function OutputTab({ onAnswer }: { onAnswer: AnswerApproval }) {
   const order = useRunStore((s) => s.order);
   const nodes = useRunStore((s) => s.nodes);
   const error = useRunStore((s) => s.error);
@@ -196,6 +220,7 @@ function OutputTab() {
   const textLength = order.reduce((n, id) => n + (nodes[id]?.text.length ?? 0), 0);
   return (
     <StickToBottom content={`${order.length}:${textLength}:${error}`}>
+      <Approvals onAnswer={onAnswer} />
       {order.length === 0 && !error && <p className="text-sm text-muted-foreground">Waiting for the first node…</p>}
       <ol className="flex flex-col gap-2">
         {order.map((id) => (
@@ -283,7 +308,13 @@ function HistoryNote() {
 }
 
 /** The run drawer under the canvas: per-node output (streamed live) and the run's log. */
-export function RunPanel() {
+export function RunPanel({
+  onAnswer,
+  onStop,
+}: {
+  onAnswer: AnswerApproval;
+  onStop: () => void;
+}) {
   const open = useRunStore((s) => s.panelOpen && s.phase !== "idle");
   const phase = useRunStore((s) => s.phase);
   const startedAt = useRunStore((s) => s.startedAt);
@@ -308,6 +339,12 @@ export function RunPanel() {
         </span>
         <Elapsed from={startedAt} to={finishedAt} />
         <HistoryNote />
+        {phase === "paused" && (
+          <Button variant="outline" size="xs" onClick={onStop}>
+            <Square />
+            Stop run
+          </Button>
+        )}
         <div role="tablist" aria-label="Run details" className="ml-2 flex gap-1">
           <Tab id="output" active={tab === "output"} onSelect={() => setTab("output")}>
             Output
@@ -327,7 +364,7 @@ export function RunPanel() {
         </Button>
       </header>
       <div role="tabpanel" id={`run-tabpanel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
-        {tab === "output" ? <OutputTab /> : <LogsTab />}
+        {tab === "output" ? <OutputTab onAnswer={onAnswer} /> : <LogsTab />}
       </div>
     </section>
   );

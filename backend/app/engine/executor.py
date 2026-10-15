@@ -40,6 +40,18 @@ class NodeError(Exception):
     """A node failure with a message meant for the user (shown in the run panel)."""
 
 
+class AwaitApproval(Exception):
+    """Raised by an executor to stop and wait for a person (Approval Gate). The runner marks the
+    node `waiting`, keeps the rest of the flow going, and pauses the run once nothing else can
+    run; the reviewer's answer resumes it (Runner.decide)."""
+
+    def __init__(self, message: str, content: Any, allow_edit: bool) -> None:
+        super().__init__(message)
+        self.message = message
+        self.content = content
+        self.allow_edit = allow_edit
+
+
 Executor = Callable[["NodeContext"], Awaitable[NodeResult]]
 
 _EXECUTORS: dict[NodeType, Executor] = {}

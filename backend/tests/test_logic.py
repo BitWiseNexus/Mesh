@@ -202,7 +202,7 @@ class TestLoop:
                 assert order[i + 1] == ("node_finished", "log")
         assert len(finished(events, "log")) == 3
 
-    def test_a_body_that_doesnt_come_back_ends_the_loop(self) -> None:
+    def test_a_body_that_doesnt_come_back_breaks_out_of_the_loop(self) -> None:
         # loop → a → if: "!!" not in it → back to the loop; otherwise → exit (inside the body)
         f = flow(
             [
@@ -225,9 +225,9 @@ class TestLoop:
         outcome, events = run(f, executors=AGENT)
         assert outcome.status == "succeeded"
         assert outcome.outputs["exit"] == "go!!"
-        assert outcome.outputs["out"] == "go!"  # the loop's latest input
+        assert outcome.statuses["out"] == "skipped"  # a break: Done means "ran out of passes"
         messages = [e["message"] for e in events if e["type"] == "log" and e["node_id"] == "l"]
-        assert "The loop body didn't come back, so the loop ends" in messages
+        assert "The loop body didn't come back, so the loop ends here (Done is skipped)" in messages
 
     def test_a_loop_without_a_way_back_runs_its_body_once(self) -> None:
         f = flow(
@@ -342,3 +342,81 @@ def test_recorder_budget_isnt_used_up_by_repeated_nodes(monkeypatch: pytest.Monk
         merged |= w
     state = merged["node_states.a"]
     assert state["output_truncated"] is False and state["iteration"] == 20
+
+
+class TestRetryUntil:
+    """The "ask again until it's right, give up after N tries" pattern, built as Mesh expects:
+    trigger → Loop; Loop ⟲ agent → If (< 5): True → Result (leaves the loop), False → back to the
+    Loop; Loop.done → Gave up."""
+
+    FLOW = flow(
+        [
+            node("t", "trigger_manual", "trigger", input="an integer between 0 and 10"),
+            node("l", "logic_loop", "loop", max_iterations=5),
+            node("a", "agent_node", "agent", prompt="{{trigger.output}}"),
+            node("check", "logic_if", "check", operator="less_than", value="5"),
+            node("result", "output_display", "result"),
+            node("gave_up", "output_display", "gave_up"),
+        ],
+        [
+            edge("t", "l"),
+            edge("l", "a", "loop"),
+            edge("a", "check"),
+            edge("check", "result", "true"),
+            edge("check", "l", "false"),
+            edge("l", "gave_up", "done"),
+        ],
+    )
+
+    @staticmethod
+    def answers(*values: str):
+        remaining = list(values)
+        prompts: list[str] = []
+
+        async def agent(ctx: NodeContext) -> NodeResult:
+            prompts.append(ctx.field("prompt"))
+            return NodeResult(remaining.pop(0))
+
+        return agent, prompts
+
+    def test_stops_as_soon_as_the_answer_fits(self) -> None:
+        agent, prompts = self.answers("8", "7", "3")
+        outcome, _ = run(self.FLOW, executors={T.AGENT_NODE: agent})
+        assert outcome.status == "succeeded"
+        assert outcome.outputs["result"] == "3"
+        assert outcome.statuses["gave_up"] == "skipped"
+        assert prompts == ["an integer between 0 and 10"] * 3  # the instruction every time
+
+    def test_gives_up_after_max_iterations(self) -> None:
+        agent, prompts = self.answers("9", "9", "9", "9", "9")
+        outcome, _ = run(self.FLOW, executors={T.AGENT_NODE: agent})
+        assert outcome.status == "succeeded" and len(prompts) == 5
+        assert outcome.outputs["gave_up"] == "9" and outcome.statuses["result"] == "skipped"
+
+
+def test_steps_that_can_never_get_their_inputs_fail_the_run(monkeypatch) -> None:
+    """The safety net behind validation: the wiring from a user report — the Loop is only reached
+    from inside its own loop, so it never starts and the agent waits for it forever."""
+    monkeypatch.setattr("app.engine.compiler.validate_flow", lambda flow: [])
+    f = flow(
+        [
+            node("t", "trigger_manual"),
+            node("a", "agent_node", label="Agent"),
+            node("check", "logic_if", operator="less_than", value="5"),
+            node("result", "output_display"),
+            node("l", "logic_loop"),
+        ],
+        [
+            edge("t", "a"),
+            edge("a", "check"),
+            edge("check", "result", "true"),
+            edge("check", "l", "false"),
+            edge("l", "a", "loop"),
+            edge("l", "result", "done"),
+        ],
+    )
+    outcome, _ = run(f, executors=AGENT)
+    assert outcome.status == "failed"
+    assert outcome.error is not None
+    assert outcome.error.startswith("The run couldn't finish: “Agent”")
+    assert "a Loop has to be entered through its input" in outcome.error

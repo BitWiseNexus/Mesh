@@ -175,6 +175,17 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
     }
 
     if (node.type === "logic_loop") {
+      const body = loopBody(node.id, links);
+      const senders = links.filter((l) => l.target === node.id).map((l) => l.source);
+      if (senders.length > 0 && senders.every((s) => body.has(s))) {
+        // Only reached from inside its own loop: nothing can ever start it.
+        issues.push({
+          id: `loop-not-entered:${node.id}`,
+          severity: "error",
+          nodeId: node.id,
+          message: `${name(node)} is only reached from inside its own loop, so it can't start — connect the flow into the Loop first, and the steps to repeat to its Loop output`,
+        });
+      }
       if (!edges.some((e) => e.source === node.id && e.sourceHandle === "loop")) {
         issues.push({
           id: `empty-loop:${node.id}`,
@@ -182,16 +193,13 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
           nodeId: node.id,
           message: `${name(node)} has nothing connected to its Loop output`,
         });
-      } else {
-        const body = loopBody(node.id, links);
-        if (!links.some((l) => body.has(l.source) && l.target === node.id)) {
-          issues.push({
-            id: `loop-no-return:${node.id}`,
-            severity: "warning",
-            nodeId: node.id,
-            message: `${name(node)}'s Loop output never leads back to it, so the loop runs only once`,
-          });
-        }
+      } else if (!links.some((l) => body.has(l.source) && l.target === node.id)) {
+        issues.push({
+          id: `loop-no-return:${node.id}`,
+          severity: "warning",
+          nodeId: node.id,
+          message: `${name(node)}'s Loop output never leads back to it, so the loop runs only once`,
+        });
       }
     }
 

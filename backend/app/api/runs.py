@@ -15,6 +15,7 @@ EventSource (which can't send headers).
 
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
@@ -26,12 +27,20 @@ from app.core.auth import CurrentUser
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.firebase import get_db
-from app.engine.compiler import compile_flow
+from app.engine.compiler import ExecutionPlan, compile_flow
 from app.engine.executor import not_runnable_issues
+from app.engine.runner import Decision
 from app.engine.validation import FlowIssue
 from app.repositories.credentials import CredentialRepository
 from app.repositories.runs import RunRepository
-from app.schemas.runs import RunInfo, RunRequest, RunSummary
+from app.schemas.flow import Flow
+from app.schemas.runs import (
+    ApprovalDecision,
+    PendingApprovalItem,
+    RunInfo,
+    RunRequest,
+    RunSummary,
+)
 from app.services.credentials import UserSecrets
 from app.services.runs import RunManager
 
@@ -86,6 +95,7 @@ async def start_run(
     info = await runs.create(
         owner_uid=user.uid,
         flow_id=flow_id,
+        flow_name=stored.name,
         flow_version=stored.version,
         trigger_id=plan.trigger_id,
         input=body.input,
@@ -97,8 +107,77 @@ async def start_run(
         input=body.input,
         repository=runs,
         secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
+        # Kept with the checkpoint if the run pauses: it resumes the flow as it was run.
+        flow_snapshot=Flow.model_validate(stored.model_dump()).model_dump(mode="json"),
     )
     return info
+
+
+@router.post("/runs/{run_id}/approvals/{node_id}")
+async def answer_approval(
+    run_id: RunId,
+    node_id: Annotated[str, Path(min_length=1, max_length=200)],
+    body: ApprovalDecision,
+    user: CurrentUser,
+    runs: Runs,
+    manager: Manager,
+) -> RunInfo:
+    """Approves or rejects a waiting Approval Gate; the paused run continues (follow it with the
+    stream). Send `content` to continue with an edited version (if the gate allows it). 409
+    `run_not_paused`, 404 `approval_not_found`, 422 `edit_not_allowed`, 429 `too_many_runs`."""
+    if manager.active_runs(user.uid) >= get_settings().max_active_runs_per_user:
+        raise TooManyRunsError()
+    edited = "content" in body.model_fields_set
+    reserved = manager.reserve(run_id, user.uid)
+    try:
+        await runs.claim_for_resume(user.uid, run_id, node_id, edited=edited)
+        saved = await runs.load_checkpoint(run_id)
+        plan = _plan_from_checkpoint(saved)
+    except ResumeFailedError as failure:
+        manager.release(run_id)
+        await runs.update(
+            run_id,
+            {"status": "failed", "error": str(failure), "finished_at": datetime.now(UTC)},
+        )
+        raise
+    except Exception:
+        manager.release(run_id)
+        raise
+    assert saved is not None
+    manager.start(
+        run_id=run_id,
+        owner_uid=user.uid,
+        plan=plan,
+        input=None,  # the checkpoint has the run's input
+        repository=runs,
+        secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
+        checkpoint=saved,
+        decisions=[Decision(node_id, body.approved, body.content if edited else None, edited)],
+        reserved=reserved,
+    )
+    return await runs.get(user.uid, run_id, live=True)
+
+
+class ResumeFailedError(ApiError):
+    status_code = 409
+    code = "resume_failed"
+    message = "This run can't continue."
+
+
+def _plan_from_checkpoint(saved: dict | None) -> ExecutionPlan:
+    if saved is None:
+        raise ResumeFailedError("The paused run's saved state is missing, so it can't continue.")
+    try:
+        return compile_flow(Flow.model_validate(saved["flow"]), saved["trigger_id"])
+    except (ApiError, ValueError) as exc:
+        # E.g. the node catalog changed since the run paused.
+        raise ResumeFailedError(f"The paused run can't continue: {exc}") from exc
+
+
+@router.get("/approvals")
+async def list_approvals(user: CurrentUser, runs: Runs) -> list[PendingApprovalItem]:
+    """Everything waiting for the caller's approval, across their flows (oldest first)."""
+    return await runs.list_pending_approvals(user.uid)
 
 
 @router.get("/flows/{flow_id}/runs")
@@ -122,10 +201,12 @@ async def get_run(run_id: RunId, user: CurrentUser, runs: Runs, manager: Manager
 
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: RunId, user: CurrentUser, runs: Runs, manager: Manager) -> RunInfo:
-    """Stops the run if it's still going; either way returns its record."""
+    """Stops the run if it's still going or waiting for approval; returns its record."""
     live = manager.get(run_id)
-    if live is not None and live.owner_uid == user.uid:
+    if live is not None and live.owner_uid == user.uid and not live.finished:
         await manager.cancel(run_id)
+    else:
+        await runs.cancel_paused(user.uid, run_id)  # 404 for others' runs; no-op if not paused
     return await runs.get(user.uid, run_id, live=manager.is_live(run_id))
 
 

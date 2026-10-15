@@ -159,6 +159,72 @@ describe("edgeRunState", () => {
   });
 });
 
+describe("approvals", () => {
+  it("pause on a waiting gate and resume once it's answered", () => {
+    const paused = replay(
+      e({ type: "run_started", run_id: "r", trigger_id: "t" }),
+      e({ type: "approval_requested", node_id: "gate", message: "Publish?", content: "draft", allow_edit: true }),
+      e({ type: "run_paused", pending: ["gate"] }),
+    );
+    expect(paused.phase).toBe("paused");
+    expect(isRunActive(paused.phase)).toBe(false); // other runs can start meanwhile
+    expect(paused.nodes.gate.status).toBe("waiting");
+    expect(paused.approvals).toEqual({
+      gate: { message: "Publish?", content: "draft", contentTruncated: false, allowEdit: true, requestedAt: at },
+    });
+
+    const resumed = [
+      e({ type: "run_resumed" }),
+      e({ type: "approval_decided", node_id: "gate", approved: true, edited: true }),
+      e({ type: "node_finished", node_id: "gate", status: "succeeded", output: "final", handles: ["approved"] }),
+    ].reduce(applyRunEvent, paused);
+    expect(resumed.phase).toBe("running");
+    expect(resumed.approvals).toEqual({});
+    expect(resumed.nodes.gate).toMatchObject({ status: "succeeded", output: "final" });
+    expect(resumed.log.map((l) => l.message).slice(-4)).toEqual([
+      "Waiting for approval",
+      "Run resumed",
+      "approved by the reviewer (edited)",
+      "finished",
+    ]);
+  });
+
+  it("restores waiting gates from a paused run's record", () => {
+    const run = {
+      run_id: "r",
+      flow_id: "f",
+      flow_version: 1,
+      status: "paused",
+      trigger_id: "t",
+      input: null,
+      error: null,
+      created_at: at,
+      started_at: at,
+      finished_at: null,
+      node_states: {},
+      pending_approvals: [
+        {
+          node_id: "gate",
+          message: "Check it",
+          content: { a: 1 },
+          content_truncated: true,
+          allow_edit: true,
+          requested_at: at,
+        },
+      ],
+    } satisfies RunInfo;
+    const state = fromRunInfo(IDLE_RUN, run);
+    expect(state.phase).toBe("paused");
+    expect(state.approvals.gate).toEqual({
+      message: "Check it",
+      content: { a: 1 },
+      contentTruncated: true,
+      allowEdit: true,
+      requestedAt: at,
+    });
+  });
+});
+
 describe("loops", () => {
   it("records which pass a node is on", () => {
     const state = replay(

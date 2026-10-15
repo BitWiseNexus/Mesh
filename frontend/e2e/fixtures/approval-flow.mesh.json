@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "flow_id": null,
-  "name": "Approval demo",
-  "description": "",
+  "name": "Review before publishing",
+  "description": "A person approves (or edits) the draft before it's published.",
   "nodes": [
     {
       "id": "node_t",
       "type": "trigger_manual",
       "ref": "trigger",
       "data": {
-        "input": "x"
+        "input": "first draft"
       },
       "position": {
         "x": 0,
@@ -19,21 +19,39 @@
     {
       "id": "node_g",
       "type": "hitl_approval",
-      "ref": "approval",
-      "data": {},
+      "ref": "review",
+      "data": {
+        "label": "Editor review",
+        "message": "Publish \u201c{{input}}\u201d?",
+        "allow_edit": true
+      },
       "position": {
         "x": 400,
         "y": 0
       }
     },
     {
-      "id": "node_o",
+      "id": "node_yes",
       "type": "output_display",
-      "ref": "result",
-      "data": {},
+      "ref": "published",
+      "data": {
+        "label": "Published"
+      },
       "position": {
         "x": 800,
-        "y": 0
+        "y": -120
+      }
+    },
+    {
+      "id": "node_no",
+      "type": "output_display",
+      "ref": "discarded",
+      "data": {
+        "label": "Discarded"
+      },
+      "position": {
+        "x": 800,
+        "y": 120
       }
     }
   ],
@@ -49,7 +67,14 @@
       "id": "e2",
       "source": "node_g",
       "sourceHandle": "approved",
-      "target": "node_o",
+      "target": "node_yes",
+      "targetHandle": "in"
+    },
+    {
+      "id": "e3",
+      "source": "node_g",
+      "sourceHandle": "rejected",
+      "target": "node_no",
       "targetHandle": "in"
     }
   ]

@@ -22,6 +22,7 @@ from tests.flows import edge, flow, node, tool_edge
 def test_registered_executors() -> None:
     assert runnable_types() == {
         NodeType.TRIGGER_MANUAL,
+        NodeType.HITL_APPROVAL,
         NodeType.LOGIC_IF,
         NodeType.LOGIC_LOOP,
         NodeType.AGENT_NODE,
@@ -38,7 +39,11 @@ def test_registering_a_type_twice_fails() -> None:
 
 
 def test_not_runnable_nodes_and_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Every available tool type has an implementation; pretend Web Search doesn't.
+    # Every available node type has an implementation; pretend two don't.
+    import app.engine.executor as executor_module
+
+    executor_module.load_executors()
+    monkeypatch.delitem(executor_module._EXECUTORS, NodeType.HITL_APPROVAL)
     monkeypatch.setattr("app.engine.tools.get_tool_kind", lambda node_type: None)
     plan = compile_flow(
         flow(

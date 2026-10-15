@@ -3,6 +3,7 @@ app/engine/executor.py)."""
 
 from app.nodes.executors import (
     agent,
+    hitl_approval,
     http,
     logic_if,
     logic_loop,
@@ -14,6 +15,7 @@ from app.nodes.executors import (
 
 __all__ = [
     "agent",
+    "hitl_approval",
     "http",
     "logic_if",
     "logic_loop",

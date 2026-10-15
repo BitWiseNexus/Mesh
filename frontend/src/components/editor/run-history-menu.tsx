@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, History, Loader2, Square, X } from "lucide-react";
+import { Check, History, Hourglass, Loader2, Square, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useApi } from "@/components/auth/auth-provider";
@@ -24,13 +24,21 @@ import { isRunActive, useRunStore } from "@/stores/run-store";
 const STATUS: Record<RunStatus, { label: string; className: string }> = {
   queued: { label: "Starting", className: "text-sky-500" },
   running: { label: "Running", className: "text-sky-500" },
+  paused: { label: "Waiting for approval", className: "text-amber-600 dark:text-amber-500" },
   succeeded: { label: "Succeeded", className: "text-emerald-600 dark:text-emerald-500" },
   failed: { label: "Failed", className: "text-destructive" },
   cancelled: { label: "Stopped", className: "text-muted-foreground" },
 };
 
 function StatusIcon({ status }: { status: RunStatus }) {
-  const Icon = { queued: Loader2, running: Loader2, succeeded: Check, failed: X, cancelled: Square }[
+  const Icon = {
+    queued: Loader2,
+    running: Loader2,
+    paused: Hourglass,
+    succeeded: Check,
+    failed: X,
+    cancelled: Square,
+  }[
     status
   ];
   return (

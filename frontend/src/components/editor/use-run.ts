@@ -62,8 +62,13 @@ export function useRun() {
           (event) => {
             if (!ours()) return;
             useRunStore.getState().apply(event);
-            if ((event.type === "run_finished" || event.type === "snapshot") && flowId) {
+            const settled =
+              event.type === "run_finished" ||
+              event.type === "run_paused" ||
+              event.type === "snapshot";
+            if (settled && flowId) {
               void queryClient.invalidateQueries({ queryKey: runKeys.list(flowId) });
+              void queryClient.invalidateQueries({ queryKey: runKeys.approvals });
             }
           },
           { signal: controller.signal },
@@ -130,15 +135,23 @@ export function useRun() {
     [ensureSaved, follow, runs],
   );
 
+  /** Stops the shown run: a running one (its stream reports the outcome) or one waiting for
+   *  approval (nothing streams then: the stopped record is shown). */
   const stop = useCallback(async () => {
     const { runId, phase } = useRunStore.getState();
-    if (!runId || !isRunActive(phase)) return;
+    if (!runId || !(isRunActive(phase) || phase === "paused")) return;
     try {
-      await runs.cancel(runId); // the stream reports the outcome
+      const run = await runs.cancel(runId);
+      if (phase === "paused" && useRunStore.getState().runId === runId) {
+        useRunStore.getState().apply({ type: "snapshot", run });
+        // No stream reports this one: refresh the lists that show it.
+        void queryClient.invalidateQueries({ queryKey: runKeys.approvals });
+        void queryClient.invalidateQueries({ queryKey: runKeys.list(run.flow_id) });
+      }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Couldn't stop the run.");
     }
-  }, [runs]);
+  }, [runs, queryClient]);
 
   /** Opens a past run of the open flow (from the history) on the canvas and in the panel. */
   const show = useCallback(
@@ -157,7 +170,33 @@ export function useRun() {
     [runs],
   );
 
-  return { start, stop, follow, show };
+  /** Answers a waiting Approval Gate of the shown run, then follows the run as it continues. */
+  const answer = useCallback(
+    async (nodeId: string, approved: boolean, edit?: { content: unknown }) => {
+      const { runId } = useRunStore.getState();
+      if (!runId) return;
+      let run: RunInfo;
+      try {
+        run = await runs.answer(runId, nodeId, edit ? { approved, ...edit } : { approved });
+      } catch (error) {
+        toast.error(error instanceof ApiError ? error.message : "Couldn't send your answer.");
+        // Someone may have answered already (another tab): show the run as it is now.
+        try {
+          useRunStore.getState().apply({ type: "snapshot", run: await runs.get(runId) });
+        } catch {
+          // keep what's shown
+        }
+        return;
+      }
+      if (useRunStore.getState().runId !== runId) return;
+      useRunStore.setState({ phase: "running", fromHistory: false });
+      void queryClient.invalidateQueries({ queryKey: runKeys.approvals });
+      await follow(run);
+    },
+    [runs, follow, queryClient],
+  );
+
+  return { start, stop, follow, show, answer };
 }
 
 /**

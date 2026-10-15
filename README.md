@@ -75,7 +75,14 @@ production.
 **If / Else** continues on True or False (text is compared ignoring case); **Loop** repeats the
 nodes on its Loop output until "Max iterations" or until the result contains a stop text, then
 continues on Done. **Run history** (toolbar) lists a flow's past runs and replays any of them on
-the canvas. The Approval Gate isn't available yet and is reported when you press Run.
+the canvas.
+
+### Approvals
+
+An **Approval Gate** pauses the run until a person approves or rejects (and, if allowed, edits)
+what reached it; the run then continues on Approved or Rejected. Waiting runs keep their state in
+Firestore, so they can wait for hours and survive restarts. The bell in the header lists
+everything waiting for you.
 
 ## Tests
 

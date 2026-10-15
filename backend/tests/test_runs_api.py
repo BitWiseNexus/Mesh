@@ -15,6 +15,7 @@ from app.core.config import Settings
 from app.core.firebase import get_db
 from app.main import app
 from app.repositories.runs import RunRepository
+from app.schemas.node_types import NodeType
 from tests.conftest import FIRESTORE_EMULATOR, requires_firestore_emulator
 from tests.flows import edge, node
 
@@ -183,7 +184,14 @@ def test_invalid_flows_are_refused_with_their_issues(client: TestClient) -> None
     assert [i["id"] for i in detail["issues"]] == ["no-trigger", "required:a:model"]
 
 
-def test_nodes_without_executors_are_refused(client: TestClient) -> None:
+def test_nodes_without_executors_are_refused(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every available node type has an executor today; pretend the Approval Gate doesn't.
+    import app.engine.executor as executor_module
+
+    executor_module.load_executors()
+    monkeypatch.delitem(executor_module._EXECUTORS, NodeType.HITL_APPROVAL)
     flow = {
         "name": "Approval",
         "nodes": [node("t", "trigger_manual"), node("ok", "hitl_approval")],

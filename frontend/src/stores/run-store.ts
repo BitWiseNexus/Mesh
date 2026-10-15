@@ -45,6 +45,16 @@ export interface RunLogEntry {
 
 export type RunPhase = "idle" | "starting" | RunStatus;
 
+/** An Approval Gate of this run waiting for a reviewer. */
+export interface ApprovalRequest {
+  message: string;
+  content: unknown;
+  /** `content` is only a text preview (too long to keep): it can't be edited. */
+  contentTruncated: boolean;
+  allowEdit: boolean;
+  requestedAt: string;
+}
+
 export interface RunState {
   /** Flow the run belongs to (a run is cleared when another flow opens). */
   flowId: string | null;
@@ -64,6 +74,8 @@ export interface RunState {
   fromHistory: boolean;
   /** Counts runs shown (started or opened); the panel starts each one on its Output tab. */
   view: number;
+  /** Approval Gates waiting for a reviewer, by node id (phase `paused`). */
+  approvals: Record<string, ApprovalRequest>;
   panelOpen: boolean;
 }
 
@@ -81,6 +93,7 @@ export const IDLE_RUN: RunState = {
   flowVersion: null,
   fromHistory: false,
   view: 0,
+  approvals: {},
   panelOpen: false,
 };
 
@@ -238,6 +251,57 @@ export function applyRunEvent(state: RunState, event: RunEvent): RunState {
           },
         ],
       };
+    case "approval_requested": {
+      const next = withNode(
+        event.node_id,
+        { status: "waiting" },
+        { at: event.at, level: "info", nodeId: event.node_id, message: "waiting for approval" },
+      );
+      return {
+        ...next,
+        approvals: {
+          ...state.approvals,
+          [event.node_id]: {
+            message: event.message,
+            content: event.content,
+            contentTruncated: false,
+            allowEdit: event.allow_edit,
+            requestedAt: event.at,
+          },
+        },
+      };
+    }
+    case "approval_decided": {
+      const approvals = { ...state.approvals };
+      delete approvals[event.node_id];
+      return {
+        ...state,
+        approvals,
+        log: [
+          ...state.log,
+          {
+            at: event.at,
+            level: "info",
+            nodeId: event.node_id,
+            message: `${event.approved ? "approved" : "rejected"} by the reviewer${event.edited ? " (edited)" : ""}`,
+          },
+        ],
+      };
+    }
+    case "run_paused":
+      return {
+        ...state,
+        phase: "paused",
+        log: [...state.log, { at: event.at, level: "info", message: "Waiting for approval" }],
+      };
+    case "run_resumed":
+      return {
+        ...state,
+        phase: "running",
+        error: null,
+        finishedAt: null,
+        log: [...state.log, { at: event.at, level: "info", message: "Run resumed" }],
+      };
     case "snapshot":
       return fromRunInfo(state, event.run);
   }
@@ -289,6 +353,18 @@ export function fromRunInfo(state: RunState, run: RunInfo): RunState {
     finishedAt: run.finished_at,
     createdAt: run.created_at,
     flowVersion: run.flow_version,
+    approvals: Object.fromEntries(
+      (run.pending_approvals ?? []).map((a) => [
+        a.node_id,
+        {
+          message: a.message,
+          content: a.content,
+          contentTruncated: a.content_truncated,
+          allowEdit: a.allow_edit,
+          requestedAt: a.requested_at,
+        },
+      ]),
+    ),
   };
 }
 

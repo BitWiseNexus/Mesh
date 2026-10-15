@@ -201,21 +201,30 @@ def validate_flow(flow: Flow) -> list[FlowIssue]:
             )
 
         if node.type is NodeType.LOGIC_LOOP:
+            body = loop_body(node.id, links)
+            senders = [s for s, _, t in links if t == node.id]
+            if senders and all(s in body for s in senders):
+                # Only reached from inside its own loop: nothing can ever start it.
+                error(
+                    f"loop-not-entered:{node.id}",
+                    f"{name(node)} is only reached from inside its own loop, so it can't start — "
+                    "connect the flow into the Loop first, and the steps to repeat to its Loop "
+                    "output",
+                    **at,
+                )
             if not any(e.source == node.id and e.source_handle == "loop" for e in edges):
                 warning(
                     f"empty-loop:{node.id}",
                     f"{name(node)} has nothing connected to its Loop output",
                     **at,
                 )
-            else:
-                body = loop_body(node.id, links)
-                if not any(s in body and t == node.id for s, _, t in links):
-                    warning(
-                        f"loop-no-return:{node.id}",
-                        f"{name(node)}'s Loop output never leads back to it, so the loop runs "
-                        "only once",
-                        **at,
-                    )
+            elif not any(s in body and t == node.id for s, _, t in links):
+                warning(
+                    f"loop-no-return:{node.id}",
+                    f"{name(node)}'s Loop output never leads back to it, so the loop runs "
+                    "only once",
+                    **at,
+                )
 
         for field in spec.fields:
             value = node.data.get(field.key)

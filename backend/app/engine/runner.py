@@ -8,11 +8,19 @@
   PlannedNode.loop_body) runs; when the edges back into the Loop have settled, the Loop decides
   again — `loop` (the body is reset and runs once more) or `done`. Unlike other branches, the
   path a Loop doesn't take isn't skipped: `done` only fires at the end, and choosing `done`
-  doesn't skip the body that just ran. A body that doesn't come back ends the loop.
+  doesn't skip the body that just ran. A body that doesn't come back is a *break*: the loop
+  ends and Done is skipped (Done means "ran out of iterations" / "stop text found").
+- Steps still waiting for inputs when nothing else can run (a dependency cycle the validator
+  didn't catch) fail the run, naming them, instead of letting it "succeed" with steps never run.
 - The first failure fails the run: steps still running are cancelled, pending ones never start.
   So does running more than MAX_NODE_RUNS steps (runaway loops).
 - `asyncio` cancellation of `run()` (e.g. the user pressed Stop) cancels the running steps and
   finishes the run as `cancelled`; exceeding `timeout` finishes it as `failed`.
+- Approval Gates (context.md §8s): an executor raising AwaitApproval leaves its node `waiting`;
+  the rest of the flow carries on, and when nothing else can run, `run()` returns a `paused`
+  outcome with a JSON `checkpoint` (no run_finished event — the caller saves the checkpoint and
+  reports the pause). A new Runner built with that checkpoint and the reviewers' `decisions`
+  continues the run (`run_resumed`) exactly where it stopped.
 
 Every transition is reported to the event sink (see app/engine/events.py).
 """
@@ -26,13 +34,15 @@ from app.engine import events
 from app.engine.compiler import ExecutionPlan, PlanEdge
 from app.engine.context import RunContext, Secrets
 from app.engine.events import EventSink, NodeStatus, RunStatus
-from app.engine.executor import Executor, NodeError, NodeResult, get_executor
+from app.engine.executor import AwaitApproval, Executor, NodeError, NodeResult, get_executor
 from app.schemas.node_types import NodeType
 
 logger = logging.getLogger(__name__)
 
 #: Upper bound on step executions per run (nested loops multiply quickly).
 MAX_NODE_RUNS = 10_000
+#: Bump when the checkpoint layout changes (older paused runs then can't resume).
+CHECKPOINT_VERSION = 1
 
 
 @dataclass
@@ -41,6 +51,19 @@ class RunOutcome:
     error: str | None = None
     statuses: dict[str, NodeStatus] = field(default_factory=dict)
     outputs: dict[str, Any] = field(default_factory=dict)
+    #: For `paused` runs: everything needed to resume (Runner.checkpoint()); plain JSON data.
+    checkpoint: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class Decision:
+    """A reviewer's answer to a waiting Approval Gate."""
+
+    node_id: str
+    approved: bool
+    #: The content to continue with; None → the content as it was shown (unchanged).
+    content: Any = None
+    edited: bool = False
 
 
 class _StepFailed(Exception):
@@ -65,7 +88,10 @@ class Runner:
         timeout: float | None = None,
         executors: dict[Any, Executor] | None = None,
         secrets: Secrets | None = None,
+        checkpoint: dict[str, Any] | None = None,
+        decisions: list[Decision] | None = None,
     ) -> None:
+        """`checkpoint` + `decisions`: resume a paused run, answering its waiting gates."""
         self.plan = plan
         self.ctx = RunContext(plan, run_id=run_id, input=input, sink=sink, secrets=secrets)
         self.sink = sink
@@ -86,16 +112,47 @@ class Runner:
         for loop in sorted(loops, key=lambda n: len(n.loop_body), reverse=True):
             for member in loop.loop_body:
                 self._loop_of[member] = loop.id
+        #: Approval Gates waiting for a person: node id → what the reviewer sees.
+        self.pending: dict[str, dict[str, Any]] = {}
+        self._resuming = checkpoint is not None
+        self._decisions = list(decisions or [])
+        if checkpoint is not None:
+            self._restore(checkpoint)
 
     # ── public ────────────────────────────────────────────────────────────
 
     async def run(self) -> RunOutcome:
-        self.sink(events.run_started(self.ctx.run_id, self.plan.trigger_id))
+        if self._resuming:
+            self.sink(events.run_resumed())
+        else:
+            self.sink(events.run_started(self.ctx.run_id, self.plan.trigger_id))
         status: RunStatus = "succeeded"
         error: str | None = None
         try:
             async with asyncio.timeout(self.timeout):
+                for decision in self._decisions:
+                    self.decide(decision)
                 await self._schedule()
+            stuck = [n for n, status in self.statuses.items() if status == "pending"]
+            if stuck and not self.pending:
+                # Nothing runs, yet these never got all their inputs: they wait on each other.
+                names = ", ".join(f"“{self.plan.node(n).name}”" for n in stuck[:3])
+                more = f" and {len(stuck) - 3} more" if len(stuck) > 3 else ""
+                raise _RunFailed(
+                    f"The run couldn't finish: {names}{more} never got all their inputs — each "
+                    "waits for an input that can only arrive after it runs. Check the flow's "
+                    "connections (a Loop has to be entered through its input)."
+                )
+            if self.pending:
+                # Nothing else can run until someone answers. The caller saves the checkpoint
+                # and reports the pause (app/services/runs.py).
+                return RunOutcome(
+                    "paused",
+                    None,
+                    dict(self.statuses),
+                    dict(self.ctx.outputs),
+                    self.checkpoint(),
+                )
         except _StepFailed as failure:
             status, error = "failed", f"“{self.plan.node(failure.node_id).name}” failed: {failure}"
         except _RunFailed as failure:
@@ -114,8 +171,79 @@ class Runner:
 
     # ── scheduling ────────────────────────────────────────────────────────
 
+    # ── pausing & resuming ────────────────────────────────────────────────
+
+    def checkpoint(self) -> dict[str, Any]:
+        """The run's state as plain JSON data: with the same plan, a new Runner resumes it."""
+        return {
+            "version": CHECKPOINT_VERSION,
+            "statuses": dict(self.statuses),
+            "edges": dict(self._edges),
+            "outputs": dict(self.ctx.outputs),
+            "delivered": {k: [e.id for e in v] for k, v in self.ctx.delivered.items()},
+            "iterations": dict(self.ctx.iterations),
+            "awaiting_body": sorted(self._awaiting_body),
+            "runs": self._runs,
+            "input": self.ctx.input,
+            "pending": dict(self.pending),
+        }
+
+    def _restore(self, state: dict[str, Any]) -> None:
+        if state.get("version") != CHECKPOINT_VERSION:
+            raise ValueError(f"unsupported checkpoint version {state.get('version')!r}")
+        edges = {e.id: e for n in self.plan.steps for e in n.inputs}
+        self.statuses.update(state["statuses"])
+        self._edges = dict(state["edges"])
+        self.ctx.outputs = dict(state["outputs"])
+        self.ctx.delivered = {k: [edges[i] for i in v] for k, v in state["delivered"].items()}
+        self.ctx.iterations = dict(state["iterations"])
+        self.ctx.input = state["input"]
+        self._awaiting_body = set(state["awaiting_body"])
+        self._runs = state["runs"]
+        self.pending = dict(state["pending"])
+
+    def decide(self, decision: Decision) -> None:
+        """Answers a waiting Approval Gate: it finishes with the (possibly edited) content and
+        continues on its `approved` or `rejected` output."""
+        request = self.pending.pop(decision.node_id, None)
+        if request is None or self.statuses.get(decision.node_id) != "waiting":
+            raise ValueError(f"{decision.node_id!r} isn't waiting for approval")
+        output = request["content"] if decision.content is None else decision.content
+        handle = "approved" if decision.approved else "rejected"
+        self.sink(events.approval_decided(decision.node_id, decision.approved, decision.edited))
+        self.sink(
+            events.log(
+                f"{'Approved' if decision.approved else 'Rejected'} by the reviewer"
+                + (" (content edited)" if decision.edited else ""),
+                "info",
+                decision.node_id,
+            )
+        )
+        self.statuses[decision.node_id] = "succeeded"
+        self.ctx.outputs[decision.node_id] = output
+        self.sink(
+            events.node_finished(decision.node_id, "succeeded", output=output, handles=[handle])
+        )
+        self._deliver(decision.node_id, [handle])
+        self._after(decision.node_id)
+
+    def _wait(self, node_id: str, request: AwaitApproval) -> None:
+        self.statuses[node_id] = "waiting"
+        self.pending[node_id] = {
+            "message": request.message,
+            "content": request.content,
+            "allow_edit": request.allow_edit,
+            "requested_at": events.now_iso(),
+        }
+        self.sink(
+            events.approval_requested(node_id, request.message, request.content, request.allow_edit)
+        )
+
+    # ── scheduling ────────────────────────────────────────────────────────
+
     async def _schedule(self) -> None:
-        self._ready.append(self.plan.trigger_id)
+        if not self._resuming:
+            self._ready.append(self.plan.trigger_id)
         while True:
             while self._ready:
                 self._start(self._ready.pop(0))
@@ -170,6 +298,9 @@ class Runner:
             handles = list(node.outputs) if result.handles is None else list(result.handles)
             if unknown := [h for h in handles if h not in node.outputs]:
                 raise ValueError(f"executor chose unknown output handles {unknown}")
+        except AwaitApproval as request:
+            self._wait(node_id, request)
+            return None
         except NodeError as exc:
             return self._fail(node_id, str(exc))
         except Exception as exc:
@@ -257,11 +388,17 @@ class Runner:
         if waiting_loop:
             self._awaiting_body.discard(node_id)
             if not arrived:
-                # The body took a path that doesn't come back: the loop ends here.
+                # The body left the loop (e.g. an If took a path that doesn't come back): a
+                # break. The flow went on elsewhere, so Done — "ran out of iterations" — is skipped.
                 self.sink(
-                    events.log("The loop body didn't come back, so the loop ends", "info", node_id)
+                    events.log(
+                        "The loop body didn't come back, so the loop ends here (Done is skipped)",
+                        "info",
+                        node_id,
+                    )
                 )
-                self._continue_loop(node_id, ["done"])
+                for edge in self.plan.node(node_id).outputs.get("done", ()):
+                    self._settle(edge, delivered=False)
                 return
         if arrived:
             self.ctx.delivered[node_id] = arrived
@@ -273,7 +410,8 @@ class Runner:
         """Some of the loop's body is still running or about to (a branch that doesn't lead back
         may finish after the one that does). The next iteration waits for all of it."""
         body = self.plan.node(loop_id).loop_body
-        return any(self.statuses[m] == "running" for m in body) or any(
+        # A gate waiting for approval counts: the body isn't done until someone answers.
+        return any(self.statuses[m] in ("running", "waiting") for m in body) or any(
             m in body for m in self._ready
         )
 

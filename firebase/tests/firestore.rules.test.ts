@@ -50,6 +50,7 @@ beforeEach(async () => {
     await setDoc(doc(db, "flows/alice-flow"), { owner_uid: "alice", name: "Alice's flow" });
     await setDoc(doc(db, "flows/bob-flow"), { owner_uid: "bob", name: "Bob's flow" });
     await setDoc(doc(db, "runs/alice-run"), { owner_uid: "alice", status: "running" });
+    await setDoc(doc(db, "runs/alice-run/state/checkpoint"), { data: "…", owner_uid: "alice" });
     await setDoc(doc(db, "credentials/alice-openai"), { owner_uid: "alice", ciphertext: "…" });
     await setDoc(doc(db, "users/alice"), { name: "Alice" });
   });
@@ -89,6 +90,13 @@ describe.each(["flows", "runs"] as const)("%s", (name) => {
 describe("flows", () => {
   it("reading a missing flow is denied, not an empty result (no existence probing)", async () => {
     await assertFails(getDoc(doc(as("alice"), "flows", "does-not-exist")));
+  });
+});
+
+describe("runs", () => {
+  it("a paused run's saved state is never readable from a client, even by its owner", async () => {
+    await assertFails(getDoc(doc(as("alice"), "runs/alice-run/state/checkpoint")));
+    await assertFails(getDocs(collection(as("alice"), "runs/alice-run/state")));
   });
 });
 

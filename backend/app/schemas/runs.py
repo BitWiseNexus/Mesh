@@ -31,10 +31,42 @@ class NodeRunState(BaseModel):
     iteration: int | None = None
 
 
+class PendingApproval(BaseModel):
+    """An Approval Gate waiting for a reviewer."""
+
+    node_id: str
+    message: str
+    #: What the gate received (a text preview when `content_truncated`).
+    content: Any = None
+    content_truncated: bool = False
+    #: The reviewer may change the content before approving.
+    allow_edit: bool
+    requested_at: datetime
+
+
+class PendingApprovalItem(BaseModel):
+    """One approval waiting for the user, across all their flows (`GET /approvals`)."""
+
+    run_id: str
+    flow_id: str
+    flow_name: str
+    node_id: str
+    message: str
+    requested_at: datetime
+
+
+class ApprovalDecision(BaseModel):
+    approved: bool
+    #: Continue with this instead of the content shown (only if the gate allows editing). Leave
+    #: it out to keep the content as it was.
+    content: Any = None
+
+
 class RunSummary(BaseModel):
     """A run in a flow's history (no node states)."""
 
     run_id: str
+    flow_name: str = ""
     flow_version: int
     status: RunStatus
     trigger_id: str
@@ -47,6 +79,7 @@ class RunSummary(BaseModel):
 class RunInfo(BaseModel):
     run_id: str
     flow_id: str
+    flow_name: str = ""
     flow_version: int
     status: RunStatus
     trigger_id: str
@@ -56,3 +89,5 @@ class RunInfo(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     node_states: dict[str, NodeRunState] = Field(default_factory=dict)
+    #: Status `paused`: the Approval Gates waiting for a reviewer.
+    pending_approvals: list[PendingApproval] = Field(default_factory=list)
