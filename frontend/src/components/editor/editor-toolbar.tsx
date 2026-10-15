@@ -1,7 +1,6 @@
 "use client";
 
 import { Download, PanelBottomOpen, Redo2, Undo2, Upload, Waypoints } from "lucide-react";
-import { useReactFlow } from "@xyflow/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, type ChangeEvent, type MouseEvent } from "react";
@@ -9,7 +8,7 @@ import { toast } from "sonner";
 
 import { ApprovalsMenu } from "@/components/approvals-menu";
 import { UserMenu } from "@/components/auth/user-menu";
-import { FIT_VIEW_OPTIONS } from "@/components/canvas/flow-canvas";
+import { useFitView } from "@/components/canvas/use-fit-view";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Hint } from "@/components/hint";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { parseFlowJson } from "@/lib/flow/graph";
 import { canRedo, canUndo, useFlowStore } from "@/stores/flow-store";
+import { DEFAULT_FLOW_NAME, MAX_FLOW_NAME_LENGTH } from "@/types/flow";
 import { useRunStore } from "@/stores/run-store";
 
 import { FlowIssuesMenu } from "./flow-issues-menu";
@@ -46,7 +46,7 @@ export function EditorToolbar({
   const redoable = useFlowStore(canRedo);
   const hasNodes = useFlowStore((s) => s.nodes.length > 0);
   const fileInput = useRef<HTMLInputElement>(null);
-  const { fitView } = useReactFlow();
+  const fit = useFitView();
   const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const runPanelHidden = useRunStore((s) => s.phase !== "idle" && !s.panelOpen);
@@ -106,8 +106,7 @@ export function EditorToolbar({
     // An ordinary edit of *this* flow (its id and version stay): unsaved until autosave sends it,
     // and Ctrl+Z brings the previous content back.
     useFlowStore.getState().replaceContent(result.flow);
-    // Wait a frame so React Flow has the new nodes before fitting.
-    requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
+    fit();
     toast.success(`Imported “${result.flow.name}”`);
   };
 
@@ -136,8 +135,8 @@ export function EditorToolbar({
         <input
           value={name}
           onChange={(e) => setMeta({ name: e.target.value })}
-          onBlur={(e) => !e.target.value.trim() && setMeta({ name: "Untitled flow" })}
-          maxLength={200}
+          onBlur={(e) => !e.target.value.trim() && setMeta({ name: DEFAULT_FLOW_NAME })}
+          maxLength={MAX_FLOW_NAME_LENGTH}
           aria-label="Flow name"
           className="w-64 min-w-0 rounded-md bg-transparent px-2 py-1 font-medium outline-none hover:bg-muted focus:bg-muted"
         />
@@ -177,7 +176,7 @@ export function EditorToolbar({
         <input
           ref={fileInput}
           type="file"
-        name="import-into-flow"
+          name="import-into-flow"
           accept="application/json,.json"
           className="hidden"
           onChange={importFlow}

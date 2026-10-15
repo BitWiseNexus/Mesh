@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { NodeType } from "@/types/flow";
+import {
+  DEFAULT_FLOW_NAME,
+  MAX_FLOW_DESCRIPTION_LENGTH,
+  MAX_FLOW_NAME_LENGTH,
+  type NodeType,
+} from "@/types/flow";
 
 import {
   checkConnection,
@@ -145,6 +150,13 @@ describe("toFlow / fromFlow", () => {
   });
 });
 
+describe("toFlow names", () => {
+  it("saves a blank name (one being retyped) as the default name", () => {
+    expect(toFlow({ flow_id: null, name: " ", description: "" }, [], []).name).toBe(DEFAULT_FLOW_NAME);
+    expect(toFlow({ flow_id: null, name: "Leads", description: "" }, [], []).name).toBe("Leads");
+  });
+});
+
 describe("parseFlowJson", () => {
   const spec = {
     flow_id: "flow_12345",
@@ -201,6 +213,16 @@ describe("parseFlowJson", () => {
     const result = parseFlowJson(text);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain(message);
+  });
+
+  it("keeps names and descriptions within the backend's limits", () => {
+    const result = parseFlowJson(
+      JSON.stringify({ name: `  ${"n".repeat(300)}  `, description: "d".repeat(3000), nodes: [], edges: [] }),
+    );
+    expect(result.ok && result.flow.name).toBe("n".repeat(MAX_FLOW_NAME_LENGTH));
+    expect(result.ok && result.flow.description).toHaveLength(MAX_FLOW_DESCRIPTION_LENGTH);
+    const blank = parseFlowJson(JSON.stringify({ name: "  ", nodes: [], edges: [] }));
+    expect(blank.ok && blank.flow.name).toBe("Imported flow");
   });
 });
 

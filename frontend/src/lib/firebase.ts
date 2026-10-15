@@ -5,6 +5,16 @@ import { connectStorageEmulator, getStorage, type FirebaseStorage } from "fireba
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "demo-mesh";
 const useEmulators = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === "true";
+// Emulator addresses (host:port); the defaults match firebase.json. The isolated e2e stack
+// (firebase.e2e.json) runs them on other ports so it can run next to `npm run dev`.
+const authEmulator = process.env.NEXT_PUBLIC_AUTH_EMULATOR_HOST ?? "127.0.0.1:9099";
+const firestoreEmulator = process.env.NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+const storageEmulator = process.env.NEXT_PUBLIC_STORAGE_EMULATOR_HOST ?? "127.0.0.1:9199";
+
+function hostAndPort(address: string): [string, number] {
+  const [host, port] = address.split(":");
+  return [host, Number(port)];
+}
 
 const firebaseConfig = {
   // The emulators accept any API key for "demo-*" projects.
@@ -30,9 +40,9 @@ export function getFirebase(): FirebaseClients {
   const storage = getStorage(app);
 
   if (useEmulators && isFirstInit) {
-    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-    connectFirestoreEmulator(db, "127.0.0.1", 8080);
-    connectStorageEmulator(storage, "127.0.0.1", 9199);
+    connectAuthEmulator(auth, `http://${authEmulator}`, { disableWarnings: true });
+    connectFirestoreEmulator(db, ...hostAndPort(firestoreEmulator));
+    connectStorageEmulator(storage, ...hostAndPort(storageEmulator));
   }
 
   clients = { app, auth, db, storage };

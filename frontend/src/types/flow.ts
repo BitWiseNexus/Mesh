@@ -43,6 +43,14 @@ export type NodeType = (typeof NODE_TYPES)[number];
 export const EDGE_TYPES = ["data", "tool_connection"] as const;
 export type EdgeType = (typeof EDGE_TYPES)[number];
 
+// Limits the backend enforces (backend/app/schemas/flow.py; checked by test_frontend_sync.py).
+export const MAX_FLOW_NAME_LENGTH = 200;
+export const MAX_FLOW_DESCRIPTION_LENGTH = 2000;
+export const MAX_FLOW_NODES = 500;
+export const MAX_FLOW_EDGES = 2000;
+/** Saved in place of an empty name (the backend requires one). */
+export const DEFAULT_FLOW_NAME = "Untitled flow";
+
 /** Free-form per-node config. `label` overrides the node's display name. */
 export type NodeData = { label?: string } & Record<string, unknown>;
 

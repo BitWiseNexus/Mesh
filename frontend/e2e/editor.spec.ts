@@ -47,6 +47,10 @@ test("build a flow by dropping and connecting nodes", async ({ editor }) => {
   await editor.connect(editor.handle("Agent", "tools", "source"), editor.handle("Web Search", "tool", "target"));
   await expect(editor.edges).toHaveCount(4);
   await editor.readyToRun();
+  // Data edges end in an arrowhead (execution direction); the tool attachment doesn't.
+  const arrows = editor.page.locator('.react-flow__edge path[marker-end="url(#mesh-arrow-default)"]');
+  await expect(arrows).toHaveCount(3);
+  await expect(editor.page.locator(".react-flow__edge path[marker-end]")).toHaveCount(3);
   const draft = await editor.draft();
   expect(draft.edges.map((e: { type: string }) => e.type).sort()).toEqual([
     "data",
@@ -208,4 +212,29 @@ test("flows containing retired node types still open, and explain what replaced 
   await expect(editor.palette.getByText("Notion", { exact: true })).toHaveCount(0); // not addable
   await editor.issuesButton("1 error").click();
   await expect(page.getByRole("menuitem", { name: /knowledge-base source/ })).toBeVisible();
+});
+
+test("flow names stay within the backend's limits", async ({ editor, page }) => {
+  await editor.open();
+  const name = editor.toolbar.getByLabel("Flow name");
+  await expect(name).toHaveAttribute("maxlength", "200");
+
+  // A name being retyped is empty for a moment: saving then must not fail.
+  await name.fill("Lead router");
+  await editor.save();
+  await name.fill("");
+  await expect(editor.saveStatus()).toHaveText("Unsaved changes");
+  await editor.save();
+  await page.reload();
+  await expect(name).toHaveValue("Untitled flow");
+
+  // An imported file with an over-long name is shortened, so the flow can still be saved.
+  await page.locator("input[name=import-into-flow]").setInputFiles({
+    name: "long.mesh.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ name: "x".repeat(300), nodes: [], edges: [] })),
+  });
+  await page.getByRole("button", { name: "Replace" }).click();
+  await expect(name).toHaveValue("x".repeat(200));
+  await editor.save();
 });

@@ -48,7 +48,9 @@ export function useConfirm(): [(options: ConfirmOptions) => Promise<boolean>, Re
   const dialog = (
     <AlertDialog open={open} onOpenChange={(next) => !next && settle(false)}>
       <AlertDialogContent>
-        <AlertDialogHeader>
+        {/* wrap-anywhere: titles quote user text (flow names) that may have no spaces at all —
+            unwrapped, it widened the dialog past the screen and pushed the buttons out of reach. */}
+        <AlertDialogHeader className="min-w-0 wrap-anywhere">
           <AlertDialogTitle>{options.title}</AlertDialogTitle>
           {options.description && (
             <AlertDialogDescription>{options.description}</AlertDialogDescription>

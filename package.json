@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:no-emulators": "node scripts/dev.mjs --no-emulators",
-    "test:rules": "npm --prefix firebase test"
+    "test:rules": "npm --prefix firebase test",
+    "test:backend": "node scripts/test-backend.mjs"
   }
 }

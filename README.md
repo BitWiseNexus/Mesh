@@ -87,8 +87,9 @@ everything waiting for you.
 ## Tests
 
 ```bash
-# Backend: lint + tests (Firestore/Auth tests run when the emulators are up)
-cd backend && uv run ruff check . && uv run pytest
+# Backend: lint, then all tests inside throwaway Auth + Firestore emulators on separate ports
+# (plain `uv run pytest` skips the emulator tests — they wipe Firestore between tests)
+cd backend && uv run ruff check . && cd .. && npm run test:backend
 
 # Frontend: lint, types, unit tests
 cd frontend && npm run lint && npm run typecheck && npm test
@@ -96,8 +97,12 @@ cd frontend && npm run lint && npm run typecheck && npm test
 # Security rules (starts its own emulators on separate ports)
 npm install --prefix firebase && npm run test:rules
 
-# End-to-end, full stack (starts or reuses emulators, backend and frontend)
+# End-to-end, full stack (starts or reuses emulators, backend and `next dev`)
 cd frontend && npx playwright install chromium && npm run test:e2e
+
+# End-to-end the way CI runs it: fresh emulators, backend and a production build, on ports of
+# their own — safe to run next to `npm run dev`
+cd frontend && npm run test:e2e:ci
 ```
 
 CI runs all four suites on every push and pull request (`.github/workflows/ci.yml`).

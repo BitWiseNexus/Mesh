@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { copyNodes } from "@/lib/flow/clipboard";
+
 import {
   bindDraft,
   draftKeyFor,
@@ -20,8 +22,22 @@ describe("flow store", () => {
   it("adds nodes with registry defaults and selects them", () => {
     const id = store().addNode("agent_node", { x: 10, y: 20 });
     const node = store().nodes.find((n) => n.id === id)!;
-    expect(node.data).toMatchObject({ model: "gpt-4o", temperature: 0.7 });
+    expect(node.data).toMatchObject({ model: "gpt-6-sol", temperature: 0.7 });
     expect(store().selectedNodeId).toBe(id);
+  });
+
+  it("gives new agents the suggested default model (not other nodes, not existing ones)", () => {
+    const before = store().addNode("agent_node", { x: 0, y: 0 });
+    store().setDefaultModel("claude-sonnet-5");
+    const agent = store().addNode("agent_node", { x: 0, y: 100 });
+    const tool = store().addNode("tool_http", { x: 0, y: 200 });
+    const data = (id: string) => store().nodes.find((n) => n.id === id)!.data;
+    expect(data(agent).model).toBe("claude-sonnet-5");
+    expect(data(before).model).toBe("gpt-6-sol");
+    expect(data(tool).model).toBeUndefined();
+    store().newFlow("blank"); // editor configuration survives switching flows
+    expect(store().defaultModel).toBe("claude-sonnet-5");
+    store().setDefaultModel(null);
   });
 
   it("connects nodes with the right edge type and rejects invalid connections", () => {
@@ -362,5 +378,148 @@ describe("node refs", () => {
     expect(store().nodes.map((n) => n.ref)).toEqual(["trigger", "agent"]);
     expect(store().dirty).toBe(false);
     expect(store().toFlow().nodes.map((n) => n.ref)).toEqual(["trigger", "agent"]);
+  });
+});
+
+describe("copy, paste, duplicate", () => {
+  beforeEach(() => store().newFlow("blank"));
+
+  const build = () => {
+    const trigger = store().addNode("trigger_manual", { x: 0, y: 0 });
+    const agent = store().addNode("agent_node", { x: 300, y: 0 });
+    store().onConnect({ source: trigger, sourceHandle: "out", target: agent, targetHandle: "in" });
+    return { trigger, agent };
+  };
+
+  it("pastes copies as one undoable step and selects only them", () => {
+    const { trigger, agent } = build();
+    const clipboard = copyNodes(store().nodes, store().edges, new Set([trigger, agent]))!;
+    const before = store().past.length;
+
+    expect(store().pasteNodes(clipboard, { topLeft: { x: 0, y: 300 } })).toBeNull();
+    expect(store().nodes).toHaveLength(4);
+    expect(store().edges).toHaveLength(2);
+    expect(store().nodes.filter((n) => n.selected).map((n) => n.ref)).toEqual(["trigger_2", "agent_2"]);
+    expect(store().selectedNodeId).toBeNull(); // two selected → no settings panel
+    expect(store().past.length).toBe(before + 1);
+    expect(store().dirty).toBe(true);
+
+    store().undo();
+    expect(store().nodes).toHaveLength(2);
+    expect(store().edges).toHaveLength(1);
+  });
+
+  it("duplicates next to the originals", () => {
+    const { agent } = build();
+    expect(store().duplicateNodes([agent])).toBeNull();
+    const copy = store().nodes.at(-1)!;
+    expect(copy).toMatchObject({ ref: "agent_2", position: { x: 340, y: 40 }, selected: true });
+    expect(store().selectedNodeId).toBe(copy.id); // a single copy opens in the settings panel
+    expect(store().edges).toHaveLength(1); // the trigger wasn't duplicated, so neither is its edge
+  });
+
+  it("refuses pastes that would make the flow too big", () => {
+    const { agent } = build();
+    const clipboard = copyNodes(store().nodes, store().edges, new Set([agent]))!;
+    const many = { nodes: Array.from({ length: 499 }, (_, i) => ({ ...clipboard.nodes[0], id: `n${i}` })), edges: [] };
+    expect(store().pasteNodes(many, { topLeft: { x: 0, y: 0 } })).toContain("at most 500 nodes");
+    expect(store().nodes).toHaveLength(2);
+  });
+
+  it("selects all nodes (and no edges)", () => {
+    build();
+    useFlowStore.setState({ edges: store().edges.map((e) => ({ ...e, selected: true })) });
+    const { fingerprint, past } = store();
+    store().selectAll();
+    expect(store().nodes.every((n) => n.selected)).toBe(true);
+    expect(store().edges.some((e) => e.selected)).toBe(false);
+    expect(store().selectedNodeId).toBeNull();
+    // Selection isn't an edit: no undo step, content unchanged.
+    expect(store().past).toBe(past);
+    expect(store().fingerprint).toBe(fingerprint);
+  });
+
+  it("deletes several nodes and their edges as one step", () => {
+    const { trigger, agent } = build();
+    store().addNode("output_display", { x: 600, y: 0 });
+    store().deleteNodes([trigger, agent]);
+    expect(store().nodes.map((n) => n.type)).toEqual(["output_display"]);
+    expect(store().edges).toEqual([]);
+    store().undo();
+    expect(store().nodes).toHaveLength(3);
+    expect(store().edges).toHaveLength(1);
+  });
+});
+
+describe("adding linked nodes", () => {
+  beforeEach(() => store().newFlow("blank"));
+
+  it("adds a node connected to a dragged handle, as one undo step", () => {
+    const agent = store().addNode("agent_node", { x: 0, y: 0 });
+    const before = store().past.length;
+    const tool = store().addNode("tool_http", { x: 0, y: 200 }, {
+      kind: "connect",
+      from: { nodeId: agent, handleId: "tools", handleType: "source" },
+    });
+    expect(store().edges).toMatchObject([{ source: agent, target: tool, type: "tool_connection" }]);
+    expect(store().past.length).toBe(before + 1);
+    store().undo();
+    expect(store().nodes).toHaveLength(1);
+    expect(store().edges).toHaveLength(0);
+  });
+
+  it("still adds the node when the link isn't possible", () => {
+    const out = store().addNode("output_display", { x: 0, y: 0 });
+    store().addNode("tool_http", { x: 0, y: 200 }, {
+      kind: "connect",
+      from: { nodeId: out, handleId: "in", handleType: "target" },
+    });
+    expect(store().nodes).toHaveLength(2);
+    expect(store().edges).toHaveLength(0);
+  });
+
+  it("inserts new and existing nodes into an edge", () => {
+    const trigger = store().addNode("trigger_manual", { x: 0, y: 0 });
+    const out = store().addNode("output_display", { x: 600, y: 0 });
+    store().onConnect({ source: trigger, sourceHandle: "out", target: out, targetHandle: "in" });
+    const edgeId = store().edges[0].id;
+
+    const agent = store().addNode("agent_node", { x: 300, y: 0 }, { kind: "split", edgeId });
+    const chain = () => store().edges.map((e) => [e.source, e.target]);
+    expect(chain()).toEqual([
+      [trigger, agent],
+      [agent, out],
+    ]);
+
+    // An existing node dropped on an edge after a drag: the drag's snapshot is the undo step.
+    const gate = store().addNode("hitl_approval", { x: 300, y: 300 });
+    store().snapshot(); // what the drag start records
+    const steps = store().past.length;
+    expect(store().insertNodeIntoEdge(gate, store().edges[1].id, { record: false })).toBe(true);
+    expect(store().past.length).toBe(steps);
+    expect(chain()).toEqual([
+      [trigger, agent],
+      [agent, gate],
+      [gate, out],
+    ]);
+    expect(store().insertNodeIntoEdge(gate, "missing")).toBe(false);
+  });
+});
+
+describe("moveNodes", () => {
+  beforeEach(() => store().newFlow("blank"));
+
+  it("moves several nodes as one undo step, and does nothing when nothing moves", () => {
+    const a = store().addNode("trigger_manual", { x: 0, y: 0 });
+    const b = store().addNode("output_display", { x: 10, y: 10 });
+    const steps = store().past.length;
+    store().moveNodes(new Map([[a, { x: 0, y: 0 }]]));
+    expect(store().past.length).toBe(steps); // no change → no undo step
+
+    store().moveNodes(new Map([[a, { x: 100, y: 0 }], [b, { x: 400, y: 0 }], ["gone", { x: 1, y: 1 }]]));
+    expect(store().nodes.map((n) => n.position)).toEqual([{ x: 100, y: 0 }, { x: 400, y: 0 }]);
+    expect(store().past.length).toBe(steps + 1);
+    store().undo();
+    expect(store().nodes.map((n) => n.position)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 10 }]);
   });
 });

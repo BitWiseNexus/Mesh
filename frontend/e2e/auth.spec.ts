@@ -94,8 +94,13 @@ test("Google sign-in (Auth emulator popup)", async ({ page }) => {
   }).toPass({ timeout: 20_000 });
   await email.fill(newUser().email);
   await popup.getByLabel(/display name/i).filter({ visible: true }).fill("Katherine Johnson");
-  await popup.getByRole("button", { name: /sign in with google/i }).click();
-
-  await expect(page).toHaveURL(/\/flows$/);
+  // The submit click can be ignored the same way (seen once in ~10 CI-path runs): retry it until
+  // the popup closes.
+  await expect(async () => {
+    if (!popup.isClosed()) {
+      await popup.getByRole("button", { name: /sign in with google/i }).click({ timeout: 2000 });
+    }
+    await expect(page).toHaveURL(/\/flows$/, { timeout: 3000 });
+  }).toPass({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: /^Account: Katherine Johnson/ })).toBeVisible();
 });

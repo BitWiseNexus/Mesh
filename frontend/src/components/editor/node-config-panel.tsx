@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
 import { ConfigField } from "./config-fields";
+import { FLOATING_PANEL } from "./panels";
 import { RefField } from "./ref-field";
 
 const NO_ISSUES: FlowIssue[] = [];
@@ -62,7 +63,7 @@ export function NodeConfigPanel() {
   return (
     <aside
       aria-label="Node settings"
-      className="flex w-80 shrink-0 flex-col border-l bg-background"
+      className={cn("flex w-80 shrink-0 flex-col border-l bg-background max-[1100px]:right-0", FLOATING_PANEL)}
       style={{ "--node-accent": category.color } as CSSProperties}
     >
       <div className="flex items-start gap-3 border-b p-4">

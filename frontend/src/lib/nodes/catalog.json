@@ -184,7 +184,7 @@
         }
       ],
       "defaultData": {
-        "model": "gpt-4o",
+        "model": "gpt-6-sol",
         "credential_id": null,
         "system_prompt": "",
         "prompt": "{{input}}",
@@ -196,18 +196,10 @@
         {
           "key": "model",
           "label": "Model",
-          "kind": "text",
+          "kind": "model",
+          "help": "Any model LiteLLM supports, e.g. claude-sonnet-5 or gpt-6-sol.",
           "required": true,
-          "templated": false,
-          "suggestions": [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "claude-opus-5-5",
-            "claude-sonnet-5-5",
-            "claude-haiku-4-5",
-            "gemini-2.5-pro",
-            "gemini-2.5-flash"
-          ]
+          "templated": false
         },
         {
           "key": "credential_id",
@@ -303,7 +295,7 @@
         }
       ],
       "defaultData": {
-        "model": "gpt-4o",
+        "model": "gpt-6-sol",
         "credential_id": null,
         "system_prompt": "",
         "prompt": "{{input}}",
@@ -315,18 +307,10 @@
         {
           "key": "model",
           "label": "Model",
-          "kind": "text",
+          "kind": "model",
+          "help": "Any model LiteLLM supports, e.g. claude-sonnet-5 or gpt-6-sol.",
           "required": true,
-          "templated": false,
-          "suggestions": [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "claude-opus-5-5",
-            "claude-sonnet-5-5",
-            "claude-haiku-4-5",
-            "gemini-2.5-pro",
-            "gemini-2.5-flash"
-          ]
+          "templated": false
         },
         {
           "key": "credential_id",

@@ -128,10 +128,17 @@ class RunManager:
         checkpoint if the run pauses; `checkpoint` + `decisions` resume a paused run."""
         live = reserved or LiveRun(run_id=run_id, owner_uid=owner_uid, log=RunEventLog())
         recorder = RunRecorder(repository, run_id)
+        #: The run's last event (finished / paused), held back until the run doc says so.
+        settled: list[RunEvent] = []
 
         def sink(event: RunEvent) -> None:
-            live.log.publish(event)
             recorder.record(event)
+            # Clients reload stored state when they see the run end (run history, the approvals
+            # list): publishing it before the recorder's write lands let them read the old status.
+            if event["type"] in ("run_finished", "run_paused"):
+                settled.append(event)
+            else:
+                live.log.publish(event)
 
         runner = Runner(
             plan,
@@ -169,7 +176,9 @@ class RunManager:
                 sink(events.run_finished("failed", "Internal error while running the flow"))
             finally:
                 live.finished = True
-                await recorder.close()
+                await recorder.close()  # every update written (or given up on)
+                for event in settled:
+                    live.log.publish(event)
                 live.log.close()
                 self._forget_later(live)
 

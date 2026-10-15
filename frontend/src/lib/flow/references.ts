@@ -63,8 +63,17 @@ export function referencedNodes(text: string): string[] {
 
 /** Rewrites references to node `from` so they point at `to`; everything else is kept verbatim. */
 export function renameReferences(text: string, from: string, to: string): string {
+  return rewriteReferences(text, new Map([[from, to]]));
+}
+
+/**
+ * Rewrites references to every node in `renames` (old name → new name) in one pass, so names that
+ * swap (a → b, b → a) can't be renamed twice. Everything else is kept verbatim.
+ */
+export function rewriteReferences(text: string, renames: ReadonlyMap<string, string>): string {
   return text.replace(TOKEN, (raw, inner: string) => {
     const part = parseToken(inner);
-    return part?.kind === "ref" && part.node === from ? formatReference(to, part.path) : raw;
+    const to = part?.kind === "ref" ? renames.get(part.node) : undefined;
+    return part?.kind === "ref" && to !== undefined ? formatReference(to, part.path) : raw;
   });
 }

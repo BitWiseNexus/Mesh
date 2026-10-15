@@ -6,7 +6,10 @@ import type { Connection, Edge, Node } from "@xyflow/react";
 
 import { NODE_REGISTRY, type HandleDef } from "@/lib/nodes/registry";
 import {
+  DEFAULT_FLOW_NAME,
   EDGE_TYPES,
+  MAX_FLOW_DESCRIPTION_LENGTH,
+  MAX_FLOW_NAME_LENGTH,
   NODE_TYPES,
   type EdgeType,
   type Flow,
@@ -25,6 +28,10 @@ export type FlowMeta = Pick<Flow, "flow_id" | "name" | "description">;
 
 export const SCHEMA_VERSION = 1;
 
+/** Node cards are `w-60` (240px) wide and about 60px tall (before React Flow measures them). */
+export const NODE_WIDTH = 240;
+export const NODE_HEIGHT = 60;
+
 export const newId = (prefix: string): string =>
   `${prefix}_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`;
 
@@ -34,6 +41,8 @@ export function toFlow(meta: FlowMeta, nodes: CanvasNode[], edges: CanvasEdge[])
   return {
     schema_version: SCHEMA_VERSION,
     ...meta,
+    // The backend requires a name; one being retyped (empty for a moment) saves as the default.
+    name: meta.name.trim() ? meta.name : DEFAULT_FLOW_NAME,
     nodes: nodes.map(
       (n): FlowNode => ({
         id: n.id,
@@ -281,8 +290,15 @@ export function parseFlowJson(text: string): ParseResult {
     flow: {
       schema_version: SCHEMA_VERSION,
       flow_id: typeof raw.flow_id === "string" ? raw.flow_id : null,
-      name: typeof raw.name === "string" && raw.name.trim() ? raw.name : "Imported flow",
-      description: typeof raw.description === "string" ? raw.description : "",
+      // Within the backend's limits, so the imported flow can be saved.
+      name:
+        typeof raw.name === "string" && raw.name.trim()
+          ? raw.name.trim().slice(0, MAX_FLOW_NAME_LENGTH)
+          : "Imported flow",
+      description:
+        typeof raw.description === "string"
+          ? raw.description.slice(0, MAX_FLOW_DESCRIPTION_LENGTH)
+          : "",
       nodes,
       edges,
     },

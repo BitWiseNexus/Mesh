@@ -5,11 +5,18 @@ import urllib.request
 
 import pytest
 
-AUTH_EMULATOR = "http://127.0.0.1:9099"
-FIRESTORE_EMULATOR = "http://127.0.0.1:8080"
+# Emulator tests run only against emulators named explicitly in the environment, as
+# `firebase emulators:exec` does (`npm run test:backend`, CI). Never against the `npm run dev` ones
+# by default: the API tests wipe Firestore between tests, which would delete the developer's flows.
+_AUTH_HOST = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "")
+_FIRESTORE_HOST = os.environ.get("FIRESTORE_EMULATOR_HOST", "")
+AUTH_EMULATOR = f"http://{_AUTH_HOST}"
+FIRESTORE_EMULATOR = f"http://{_FIRESTORE_HOST}"
 
 
 def _reachable(url: str) -> bool:
+    if url == "http://":
+        return False  # not configured
     try:
         urllib.request.urlopen(url, timeout=0.5)
     except urllib.error.HTTPError:
@@ -24,7 +31,7 @@ def requires_emulator(url: str, name: str) -> pytest.MarkDecorator:
     tests run anyway and fail loudly, so a broken CI setup can't pass by skipping everything."""
     skip = not _reachable(url) and not os.environ.get("REQUIRE_EMULATORS")
     return pytest.mark.skipif(
-        skip, reason=f"{name} emulator not running (firebase emulators:start)"
+        skip, reason=f"needs the {name} emulator: run `npm run test:backend` at the repo root"
     )
 
 

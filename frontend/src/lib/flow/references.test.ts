@@ -9,6 +9,7 @@ import {
   parseTemplate,
   referencedNodes,
   renameReferences,
+  rewriteReferences,
   type TemplatePart,
 } from "./references";
 
@@ -29,6 +30,19 @@ describe("parseTemplate (shared cases)", () => {
 describe("renameReferences (shared cases)", () => {
   it.each(cases.rename)("$text: $from → $to", ({ text, from, to, result }) => {
     expect(renameReferences(text, from, to)).toBe(result);
+  });
+});
+
+describe("rewriteReferences", () => {
+  it("renames several nodes in one pass, so swapped names don't collide", () => {
+    const renames = new Map([
+      ["agent", "agent_2"],
+      ["agent_2", "agent"],
+      ["node_1", "writer"],
+    ]);
+    expect(
+      rewriteReferences("{{agent.output}} {{ agent_2.output.x }} {{node_1.output}} {{other.output}} {{input}}", renames),
+    ).toBe("{{agent_2.output}} {{agent.output.x}} {{writer.output}} {{other.output}} {{input}}");
   });
 });
 

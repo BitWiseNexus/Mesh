@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import type { FlowSummary } from "@/lib/flows-api";
 import { useRenameFlow } from "@/lib/flows-queries";
+import { MAX_FLOW_DESCRIPTION_LENGTH, MAX_FLOW_NAME_LENGTH } from "@/types/flow";
 
 function RenameForm({ flow, onDone }: { flow: FlowSummary; onDone: () => void }) {
   const rename = useRenameFlow();
@@ -48,7 +49,7 @@ function RenameForm({ flow, onDone }: { flow: FlowSummary; onDone: () => void })
         <Input
           id="flow-name"
           value={name}
-          maxLength={200}
+          maxLength={MAX_FLOW_NAME_LENGTH}
           autoFocus
           required
           onChange={(e) => setName(e.target.value)}
@@ -59,7 +60,7 @@ function RenameForm({ flow, onDone }: { flow: FlowSummary; onDone: () => void })
         <Textarea
           id="flow-description"
           value={description}
-          maxLength={2000}
+          maxLength={MAX_FLOW_DESCRIPTION_LENGTH}
           rows={3}
           placeholder="What does this flow do?"
           onChange={(e) => setDescription(e.target.value)}

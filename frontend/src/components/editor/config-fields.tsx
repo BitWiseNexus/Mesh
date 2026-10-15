@@ -17,6 +17,7 @@ import type { FieldDef } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
 
 import { CredentialField } from "./credential-field";
+import { ModelField } from "./model-field";
 import { ReferencePicker } from "./reference-picker";
 
 interface FieldProps<F extends FieldDef = FieldDef> {
@@ -197,6 +198,17 @@ export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldPr
           value={value}
           onChange={onChange}
           invalid={invalid}
+        />
+      );
+      break;
+    case "model":
+      control = (
+        <ModelField
+          id={id}
+          value={value}
+          onChange={onChange}
+          invalid={invalid}
+          required={field.required}
         />
       );
       break;

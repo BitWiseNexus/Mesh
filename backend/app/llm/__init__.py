@@ -1,9 +1,9 @@
 """LLM access: one streaming chat interface over OpenAI / Anthropic / Gemini (via LiteLLM).
 
-    result = await complete("gpt-4o", messages, tools=[...], on_text=print)
+    result = await complete("claude-sonnet-5", messages, tools=[...], on_text=print)
     result.text, result.tool_calls
 
-- Model names may be bare (`gpt-4o`, `claude-sonnet-5-5`, `gemini-2.5-pro`) or LiteLLM-qualified
+- Model names may be bare (`gpt-6-sol`, `claude-sonnet-5`, `gemini-3.8-flash`) or LiteLLM-qualified
   (`anthropic/claude-…`); bare names get their provider prefix (`qualify_model`). Bare Gemini names
   would otherwise go to Vertex AI; Mesh uses the Gemini API key.
 - The API key is the caller's (`api_key`, e.g. the user's saved credential) or the server's
@@ -218,8 +218,8 @@ def _describe(exc: Exception, model: str, litellm: ModuleType) -> str:
         return f"{name} didn't answer in time."
     if isinstance(exc, errors.BadRequestError) and "LLM Provider NOT provided" in str(exc):
         return (
-            f"Unknown model “{model}”. Use a name like gpt-4o, claude-sonnet-5-5 or "
-            "gemini-2.5-flash, or prefix the provider (openai/…, anthropic/…, gemini/…)."
+            f"Unknown model “{model}”. Use a name like gpt-6-sol, claude-sonnet-5 or "
+            "gemini-3.8-flash, or prefix the provider (openai/…, anthropic/…, gemini/…)."
         )
     if isinstance(exc, errors.APIConnectionError):
         return f"Couldn't reach {name}: {detail}"

@@ -28,14 +28,28 @@ export function refProblem(ref: string, nodeId: string, nodes: RefNode[]): strin
   return null;
 }
 
-/** `agent`, then `agent_2`, `agent_3`, … — the first name not used as a ref or id. */
+const MAX_REF_LENGTH = 40;
+
+/**
+ * `agent`, then `agent_2`, `agent_3`, … — the first name not used as a ref or id (never a reserved
+ * one). Long prefixes are shortened so the number still fits in a ref.
+ */
 export function uniqueRef(prefix: string, taken: Iterable<string>): string {
   const used = new Set(taken);
-  if (!used.has(prefix)) return prefix;
+  if (!used.has(prefix) && !RESERVED_REFS.has(prefix)) return prefix;
   for (let i = 2; ; i++) {
-    const candidate = `${prefix}_${i}`;
+    const suffix = `_${i}`;
+    const candidate = `${prefix.slice(0, MAX_REF_LENGTH - suffix.length)}${suffix}`;
     if (!used.has(candidate)) return candidate;
   }
+}
+
+/**
+ * A ref for a copy of the node called `ref`: the same name without its number, numbered again
+ * (`agent_2` → `agent_3` when `agent` … `agent_2` exist; `summary` → `summary_2`).
+ */
+export function copyRef(ref: string, taken: Iterable<string>): string {
+  return uniqueRef(ref.replace(/_\d+$/, ""), taken);
 }
 
 /**

@@ -1,14 +1,18 @@
 "use client";
 
 import { useReactFlow } from "@xyflow/react";
-import { Search } from "lucide-react";
+import { PanelLeftClose, Search } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type DragEvent } from "react";
 
-import { DRAG_MIME } from "@/components/canvas/flow-canvas";
+import { centeredNodePosition, DRAG_MIME, getCanvasCenter } from "@/components/canvas/canvas-utils";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NODES_BY_CATEGORY, type NodeDefinition } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
+import { closeFloatingPalette, usePalette } from "@/stores/editor-ui-store";
+
+import { FLOATING_PANEL } from "./panels";
 import { useFlowStore } from "@/stores/flow-store";
 
 function PaletteItem({ def, color }: { def: NodeDefinition; color: string }) {
@@ -24,10 +28,8 @@ function PaletteItem({ def, color }: { def: NodeDefinition; color: string }) {
 
   // Click adds the node in the middle of the visible canvas.
   const onClick = () => {
-    const rect = document.querySelector(".react-flow")?.getBoundingClientRect();
-    if (!rect) return;
-    const center = screenToFlowPosition({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
-    addNode(def.type, { x: center.x - 120, y: center.y - 30 });
+    addNode(def.type, centeredNodePosition(getCanvasCenter(screenToFlowPosition)));
+    closeFloatingPalette(); // it covers the canvas on narrow screens
   };
 
   return (
@@ -66,6 +68,7 @@ function PaletteItem({ def, color }: { def: NodeDefinition; color: string }) {
 
 export function NodePalette() {
   const [query, setQuery] = useState("");
+  const [open, setOpen] = usePalette();
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -83,18 +86,33 @@ export function NodePalette() {
     })).filter((g) => g.nodes.length > 0);
   }, [query]);
 
+  if (!open) return null;
   return (
-    <aside aria-label="Node palette" className="flex w-72 shrink-0 flex-col border-r bg-background">
+    <aside
+      aria-label="Node palette"
+      className={cn("flex w-72 shrink-0 flex-col border-r bg-background max-[1100px]:left-0", FLOATING_PANEL)}
+    >
       <div className="border-b p-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search nodes…"
-            className="pl-8"
-            aria-label="Search nodes"
-          />
+        <div className="flex items-center gap-1">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search nodes…"
+              className="pl-8"
+              aria-label="Search nodes"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Hide nodes panel"
+            title="Hide nodes panel"
+            onClick={() => setOpen(false)}
+          >
+            <PanelLeftClose />
+          </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">Drag onto the canvas or click to add.</p>
       </div>

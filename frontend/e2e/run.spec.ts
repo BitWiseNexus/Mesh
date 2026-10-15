@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import {
   ECHO_FIXTURE,
   expect,
+  fixtureForApi,
   importFixture,
   test,
   TOOLS_FIXTURE,
@@ -47,6 +48,10 @@ test("runs Manual Trigger → Agent → Output and streams the reply live", asyn
     await expect(nodeStatus(editor, node, "Succeeded")).toBeVisible();
   }
   await expect(page.locator('[data-run-state="delivered"]')).toHaveCount(2);
+  // Arrowheads take the edge's colour.
+  await expect(
+    page.locator('[data-run-state="delivered"][marker-end="url(#mesh-arrow-delivered)"]'),
+  ).toHaveCount(2);
   await expect(runPanel(page).getByRole("listitem", { name: "Output output" })).toContainText(
     `Echo: ${input}`,
   );
@@ -90,7 +95,7 @@ test("Run is disabled while the flow has errors", async ({ editor, page }) => {
 
 test("an agent calls tools: another agent and an API", async ({ editor, page }) => {
   await editor.open();
-  await importFixture(editor, TOOLS_FIXTURE, 5);
+  await importFixture(editor, fixtureForApi(TOOLS_FIXTURE), 5);
   await editor.readyToRun();
   await runButton(page).click();
 

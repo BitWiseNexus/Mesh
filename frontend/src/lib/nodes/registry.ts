@@ -70,6 +70,8 @@ export type FieldDef = {
   | { kind: "knowledge_base" }
   /** The id of one of the user's saved API keys for one of `providers`; empty = automatic. */
   | { kind: "credential"; providers: string[] }
+  /** An LLM model name (suggestions from GET /models; any name is accepted). */
+  | { kind: "model" }
 );
 
 export interface NodeDefinition {

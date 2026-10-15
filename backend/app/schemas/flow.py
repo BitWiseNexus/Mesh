@@ -21,8 +21,11 @@ REF_PATTERN = r"^[a-z][a-z0-9_]{0,39}$"
 #: Can't be a node ref: `{{input.x}}` already means "the previous node's output".
 RESERVED_REFS = frozenset({"input"})
 
+# Limits shared with the editor (frontend/src/types/flow.ts, checked by test_frontend_sync.py).
 MAX_NODES = 500
 MAX_EDGES = 2000
+MAX_NAME_LENGTH = 200
+MAX_DESCRIPTION_LENGTH = 2000
 
 
 class EdgeType(StrEnum):
@@ -72,8 +75,8 @@ class Flow(BaseModel):
 
     schema_version: int = 1
     flow_id: str | None = None  # assigned by the backend on first save
-    name: str = Field(min_length=1, max_length=200)
-    description: str = Field(default="", max_length=2000)
+    name: str = Field(min_length=1, max_length=MAX_NAME_LENGTH)
+    description: str = Field(default="", max_length=MAX_DESCRIPTION_LENGTH)
     nodes: list[Node] = Field(default_factory=list, max_length=MAX_NODES)
     edges: list[Edge] = Field(default_factory=list, max_length=MAX_EDGES)
 

@@ -4,6 +4,8 @@ import asyncio
 import json
 from typing import Any
 
+import pytest
+
 from app.core.config import Settings
 from app.engine import events
 from app.engine.compiler import compile_flow
@@ -161,3 +163,42 @@ def test_manager_runs_flows_and_cancels_them() -> None:
     assert record["status"] == "cancelled"
     assert record["node_states.a"]["status"] == "cancelled"
     assert active == 0
+
+
+class SlowRepository(FakeRepository):
+    """Writes take a while, like Firestore's; checkpoints are kept in memory."""
+
+    async def update(self, run_id: str, fields: dict[str, Any]) -> None:
+        await asyncio.sleep(0.05)
+        await super().update(run_id, fields)
+
+    async def save_checkpoint(self, run_id: str, data: dict[str, Any]) -> None:
+        self.checkpoint = data
+
+    async def delete_checkpoint(self, run_id: str) -> None:
+        self.checkpoint = None
+
+
+@pytest.mark.parametrize(
+    ("last", "final_event", "status"),
+    [("output_display", "run_finished", "succeeded"), ("hitl_approval", "run_paused", "paused")],
+)
+def test_the_last_event_is_published_once_the_run_doc_says_so(
+    last: str, final_event: str, status: str
+) -> None:
+    """Clients reload the run history and approvals when a run ends or pauses: by then the stored
+    run must already say so (the approvals bell used to stay empty until its next poll)."""
+    plan = compile_flow(flow([node("t", "trigger_manual"), node("x", last)], [edge("t", "x")]))
+
+    async def main() -> str:
+        manager = RunManager(Settings(run_events_retention_seconds=60))
+        repository = SlowRepository()
+        live = manager.start(
+            run_id="r1", owner_uid="u", plan=plan, input="hi", repository=repository
+        )
+        async for e in live.log.follow():
+            if e and e["type"] == final_event:
+                return repository.merged()["status"]
+        raise AssertionError(f"no {final_event}")
+
+    assert asyncio.run(main()) == status

@@ -6,6 +6,7 @@ import { useMemo } from "react";
 
 import { useApi } from "@/components/auth/auth-provider";
 import type { ApiClient } from "@/lib/api";
+import { modelKeys } from "@/lib/models-api";
 import type { CredentialInfo, CredentialProvider } from "@/types/credentials";
 
 export function credentialsApi(api: ApiClient) {
@@ -35,7 +36,9 @@ export function useCredentials() {
 /** Writes a created/updated key into the cached list (newest first). */
 function useRemember() {
   const queryClient = useQueryClient();
-  return (saved: CredentialInfo) =>
+  return (saved: CredentialInfo) => {
+    // Which providers have a key decides the models offered (and the default model).
+    void queryClient.invalidateQueries({ queryKey: modelKeys.list });
     queryClient.setQueryData<CredentialInfo[]>(credentialKeys.list, (list) => {
       if (!list) return list;
       const exists = list.some((c) => c.credential_id === saved.credential_id);
@@ -43,6 +46,7 @@ function useRemember() {
         ? list.map((c) => (c.credential_id === saved.credential_id ? saved : c))
         : [saved, ...list];
     });
+  };
 }
 
 export function useCreateCredential() {
@@ -66,9 +70,11 @@ export function useDeleteCredential() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: credentials.remove,
-    onSuccess: (_, id) =>
+    onSuccess: (_, id) => {
+      void queryClient.invalidateQueries({ queryKey: modelKeys.list });
       queryClient.setQueryData<CredentialInfo[]>(credentialKeys.list, (list) =>
         list?.filter((c) => c.credential_id !== id),
-      ),
+      );
+    },
   });
 }

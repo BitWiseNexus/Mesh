@@ -1,5 +1,5 @@
 import { createDefaultData } from "@/lib/nodes/registry";
-import type { Flow } from "@/types/flow";
+import { DEFAULT_FLOW_NAME, type Flow } from "@/types/flow";
 
 import { newId, SCHEMA_VERSION } from "./graph";
 
@@ -10,7 +10,7 @@ export function createFlowFromTemplate(template: FlowTemplate = "starter"): Flow
   const base: Flow = {
     schema_version: SCHEMA_VERSION,
     flow_id: null,
-    name: "Untitled flow",
+    name: DEFAULT_FLOW_NAME,
     description: "",
     nodes: [],
     edges: [],

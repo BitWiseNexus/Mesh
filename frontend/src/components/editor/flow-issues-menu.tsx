@@ -3,7 +3,8 @@
 import { useReactFlow } from "@xyflow/react";
 import { CircleAlert, CircleCheck, Plus, TriangleAlert } from "lucide-react";
 
-import { FIT_VIEW_OPTIONS } from "@/components/canvas/flow-canvas";
+import { centeredNodePosition, getCanvasCenter } from "@/components/canvas/canvas-utils";
+import { useFitView } from "@/components/canvas/use-fit-view";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,6 +14,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NODE_WIDTH } from "@/lib/flow/graph";
 import type { FlowIssue } from "@/lib/flow/validate";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
@@ -22,14 +24,15 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 /** Toolbar indicator summarising flow validation, with a menu to jump to (or fix) each issue. */
 export function FlowIssuesMenu() {
   const issues = useFlowStore((s) => s.issues);
-  const { fitView, screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
+  const fit = useFitView();
 
   const errors = issues.filter((i) => i.severity === "error").length;
   const warnings = issues.length - errors;
 
   if (issues.length === 0) {
     return (
-      <span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5 px-2 text-xs whitespace-nowrap text-muted-foreground">
         <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-500" />
         Ready to run
       </span>
@@ -38,26 +41,22 @@ export function FlowIssuesMenu() {
 
   const addTrigger = () => {
     const { nodes, addNode } = useFlowStore.getState();
-    let position;
-    if (nodes.length > 0) {
-      const leftmost = nodes.reduce((a, b) => (b.position.x < a.position.x ? b : a));
-      position = { x: leftmost.position.x - 360, y: leftmost.position.y };
-    } else {
-      const rect = document.querySelector(".react-flow")?.getBoundingClientRect();
-      const center = rect
-        ? screenToFlowPosition({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
-        : { x: 0, y: 0 };
-      position = { x: center.x - 120, y: center.y - 30 };
-    }
+    // Left of the flow's leftmost node, or in the middle of an empty canvas.
+    const leftmost = nodes.length
+      ? nodes.reduce((a, b) => (b.position.x < a.position.x ? b : a))
+      : null;
+    const position = leftmost
+      ? { x: leftmost.position.x - NODE_WIDTH - 120, y: leftmost.position.y }
+      : centeredNodePosition(getCanvasCenter(screenToFlowPosition));
     addNode("trigger_manual", position);
-    requestAnimationFrame(() => void fitView({ ...FIT_VIEW_OPTIONS, duration: 300 }));
+    fit();
   };
 
   const focusIssue = (issue: FlowIssue) => {
     if (issue.fix === "add_trigger") return addTrigger();
     if (!issue.nodeId) return;
     useFlowStore.getState().selectNode(issue.nodeId);
-    void fitView({ nodes: [{ id: issue.nodeId }], maxZoom: 1, duration: 300 });
+    fit({ nodes: [{ id: issue.nodeId }] }); // after the settings panel has opened
   };
 
   return (

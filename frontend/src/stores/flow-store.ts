@@ -11,6 +11,13 @@ import { persist } from "zustand/middleware";
 
 import { createDebouncedJSONStorage } from "@/lib/debounced-storage";
 import {
+  copyNodes,
+  nodeBounds,
+  pasteNodes,
+  type NodeClipboard,
+  type PasteTarget,
+} from "@/lib/flow/clipboard";
+import {
   checkConnection,
   createEdge,
   fromFlow,
@@ -21,15 +28,25 @@ import {
   type CanvasNode,
   type ConnectionCheck,
 } from "@/lib/flow/graph";
+import { linkEdges, makeRoomForInsert, type NodeLink } from "@/lib/flow/connect";
 import { contentFingerprint } from "@/lib/flow/fingerprint";
 import { renameReferences } from "@/lib/flow/references";
 import { refProblem, uniqueRef } from "@/lib/flow/refs";
 import { createFlowFromTemplate, type FlowTemplate } from "@/lib/flow/templates";
 import { issuesByNode, validateFlow, type FlowIssue } from "@/lib/flow/validate";
 import { createDefaultData, NODE_REGISTRY } from "@/lib/nodes/registry";
-import type { Flow, NodeData, NodeType } from "@/types/flow";
+import {
+  DEFAULT_FLOW_NAME,
+  MAX_FLOW_EDGES,
+  MAX_FLOW_NODES,
+  type Flow,
+  type NodeData,
+  type NodeType,
+} from "@/types/flow";
 
 const HISTORY_LIMIT = 100;
+/** How far a duplicate lands from the original (down and to the right). */
+const DUPLICATE_OFFSET = 40;
 /** Edits with the same coalesce key within this window become one undo step. */
 const COALESCE_MS = 1000;
 
@@ -122,7 +139,7 @@ function migrateV1(persisted: unknown): PersistedDraft {
     flow: {
       schema_version: 1,
       flow_id: (v1.flowId as string | null) ?? null,
-      name: (v1.name as string) ?? "Untitled flow",
+      name: (v1.name as string) ?? DEFAULT_FLOW_NAME,
       description: (v1.description as string) ?? "",
       nodes: v1.nodes as Flow["nodes"],
       edges: v1.edges as Flow["edges"],
@@ -190,6 +207,12 @@ interface FlowState {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   selectedNodeId: string | null;
+  /**
+   * The model new agents get (from GET /models: a provider the user has a key for). Editor
+   * configuration, not flow content; null = the catalog default.
+   */
+  defaultModel: string | null;
+  setDefaultModel: (model: string | null) => void;
 
   /** Derived from nodes/edges by `validateFlow`; kept in sync by a store subscription below. */
   issues: FlowIssue[];
@@ -215,7 +238,18 @@ interface FlowState {
   onConnect: (connection: Connection) => ConnectionCheck;
 
   // Graph edits
-  addNode: (type: NodeType, position: XYPosition) => string;
+  /**
+   * Adds a node (selected) and, with `link`, connects it to a handle or inserts it into an edge
+   * (placed between the edge's ends, see `makeRoomForInsert`) — one undo step. A link that isn't
+   * possible is skipped (the node is still added at `position`).
+   */
+  addNode: (type: NodeType, position: XYPosition, link?: NodeLink) => string;
+  /**
+   * Inserts an existing node into a data edge (A → B becomes A → node → B). `record: false` when
+   * the caller's edit already took the undo snapshot (a drag that ends on the edge). Returns
+   * whether it was possible.
+   */
+  insertNodeIntoEdge: (nodeId: string, edgeId: string, options?: { record?: boolean }) => boolean;
   updateNodeData: (id: string, patch: Partial<NodeData>) => void;
   /**
    * Renames a node's ref and rewrites every `{{oldRef.output…}}` in templated fields to match.
@@ -223,7 +257,20 @@ interface FlowState {
    */
   renameRef: (id: string, ref: string) => string | null;
   deleteNode: (id: string) => void;
+  /** Deletes nodes and their edges as one undo step. */
+  deleteNodes: (ids: string[]) => void;
+  /**
+   * Adds copied nodes (see lib/flow/clipboard.ts) at `target` as one undo step and selects them.
+   * Returns a user-facing problem (and changes nothing) if the flow would get too big.
+   */
+  pasteNodes: (clipboard: NodeClipboard, target: PasteTarget) => string | null;
+  /** Pastes a copy of these nodes (and the edges between them) next to the originals. */
+  duplicateNodes: (ids: string[]) => string | null;
   selectNode: (id: string | null) => void;
+  /** Moves nodes to new positions (e.g. an auto-layout) as one undo step. */
+  moveNodes: (positions: ReadonlyMap<string, XYPosition>) => void;
+  /** Selects every node (and no edges). */
+  selectAll: () => void;
   setMeta: (meta: Partial<{ name: string; description: string }>) => void;
 
   // Whole-flow operations
@@ -290,6 +337,9 @@ export const useFlowStore = create<FlowState>()(
     (set, get) => ({
       ...stateFromFlow(createFlowFromTemplate("starter")),
 
+      defaultModel: null,
+      setDefaultModel: (defaultModel) => set({ defaultModel }),
+
       onNodesChange: (changes) => {
         const { nodes } = get();
         const startsDrag = changes.some(
@@ -322,22 +372,39 @@ export const useFlowStore = create<FlowState>()(
         return check;
       },
 
-      addNode: (type, position) => {
+      addNode: (type, position, link) => {
         get().snapshot();
         const id = newId("node");
         const taken = get().nodes.flatMap((n) => [n.id, n.ref ?? ""]);
         const ref = uniqueRef(NODE_REGISTRY[type].refPrefix, taken);
-        const node: CanvasNode = {
-          id,
-          type,
-          ref,
-          position,
-          data: createDefaultData(type),
-          selected: true,
-        };
-        const nodes = get().nodes.map((n) => (n.selected ? { ...n, selected: false } : n));
-        set({ nodes: [...nodes, node], selectedNodeId: id });
+        const data = createDefaultData(type);
+        const { defaultModel } = get();
+        for (const field of NODE_REGISTRY[type].fields) {
+          if (field.kind === "model" && defaultModel) data[field.key] = defaultModel;
+        }
+        const node: CanvasNode = { id, type, ref, position, data, selected: true };
+        let nodes = [...get().nodes.map((n) => (n.selected ? { ...n, selected: false } : n)), node];
+        let edges = get().edges;
+        const linked = link && linkEdges(link, id, nodes, edges);
+        if (linked) {
+          if (link.kind === "split") {
+            // Into an edge: between its ends, with room made if they're too close.
+            const split = edges.find((e) => e.id === link.edgeId)!;
+            nodes = makeRoomForInsert(nodes, linked, id, split.source, split.target);
+          }
+          edges = linked;
+        }
+        set({ nodes, edges, selectedNodeId: id });
         return id;
+      },
+
+      insertNodeIntoEdge: (nodeId, edgeId, { record = true } = {}) => {
+        const { nodes, edges } = get();
+        const linked = linkEdges({ kind: "split", edgeId }, nodeId, nodes, edges);
+        if (!linked) return false;
+        if (record) get().snapshot();
+        set({ edges: linked });
+        return true;
       },
 
       updateNodeData: (id, patch) => {
@@ -376,13 +443,49 @@ export const useFlowStore = create<FlowState>()(
         return null;
       },
 
-      deleteNode: (id) => {
-        get().snapshot();
+      deleteNode: (id) => get().deleteNodes([id]),
+
+      deleteNodes: (ids) => {
+        const gone = new Set(ids);
         const { nodes, edges, selectedNodeId } = get();
+        if (!nodes.some((n) => gone.has(n.id))) return;
+        get().snapshot();
         set({
-          nodes: nodes.filter((n) => n.id !== id),
-          edges: edges.filter((e) => e.source !== id && e.target !== id),
-          selectedNodeId: selectedNodeId === id ? null : selectedNodeId,
+          nodes: nodes.filter((n) => !gone.has(n.id)),
+          edges: edges.filter((e) => !gone.has(e.source) && !gone.has(e.target)),
+          selectedNodeId: selectedNodeId && gone.has(selectedNodeId) ? null : selectedNodeId,
+        });
+      },
+
+      pasteNodes: (clipboard, target) => {
+        const { nodes, edges } = get();
+        if (nodes.length + clipboard.nodes.length > MAX_FLOW_NODES) {
+          return `A flow can have at most ${MAX_FLOW_NODES} nodes.`;
+        }
+        if (edges.length + clipboard.edges.length > MAX_FLOW_EDGES) {
+          return `A flow can have at most ${MAX_FLOW_EDGES} connections.`;
+        }
+        const pasted = pasteNodes(clipboard, nodes, target);
+        get().snapshot();
+        const next = [
+          ...nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+          ...pasted.nodes,
+        ];
+        set({
+          nodes: next,
+          edges: [...edges.map((e) => (e.selected ? { ...e, selected: false } : e)), ...pasted.edges],
+          selectedNodeId: selectedIdOf(next),
+        });
+        return null;
+      },
+
+      duplicateNodes: (ids) => {
+        const { nodes, edges } = get();
+        const clipboard = copyNodes(nodes, edges, new Set(ids));
+        if (!clipboard) return null;
+        const box = nodeBounds(clipboard.nodes);
+        return get().pasteNodes(clipboard, {
+          topLeft: { x: box.x + DUPLICATE_OFFSET, y: box.y + DUPLICATE_OFFSET },
         });
       },
 
@@ -392,6 +495,31 @@ export const useFlowStore = create<FlowState>()(
             n.selected === (n.id === id) ? n : { ...n, selected: n.id === id },
           ),
           selectedNodeId: id,
+        });
+      },
+
+      moveNodes: (positions) => {
+        const { nodes } = get();
+        const moves = (n: CanvasNode) => {
+          const p = positions.get(n.id);
+          return p && (p.x !== n.position.x || p.y !== n.position.y) ? p : null;
+        };
+        if (!nodes.some(moves)) return;
+        get().snapshot();
+        set({
+          nodes: nodes.map((n) => {
+            const p = moves(n);
+            return p ? { ...n, position: { x: p.x, y: p.y } } : n;
+          }),
+        });
+      },
+
+      selectAll: () => {
+        const nodes = get().nodes.map((n) => (n.selected ? n : { ...n, selected: true }));
+        set({
+          nodes,
+          edges: get().edges.map((e) => (e.selected ? { ...e, selected: false } : e)),
+          selectedNodeId: selectedIdOf(nodes),
         });
       },
 

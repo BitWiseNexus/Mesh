@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.schemas.flow import Flow
+from app.schemas.flow import MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, Flow
 
 
 class StoredFlow(Flow):
@@ -36,6 +36,6 @@ class FlowUpdate(Flow):
 
 
 class FlowMetaUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=2000)
+    name: str | None = Field(default=None, min_length=1, max_length=MAX_NAME_LENGTH)
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION_LENGTH)
     expected_version: int | None = Field(default=None, ge=1)

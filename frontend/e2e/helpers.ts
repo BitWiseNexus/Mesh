@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
@@ -6,6 +7,8 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 export { expect };
 
 export const PASSWORD = "correct-horse-1";
+/** The backend the app under test talks to (set by playwright.config.ts). */
+export const API_URL = process.env.E2E_API_URL ?? "http://127.0.0.1:8000";
 export const FIXTURE = path.join(__dirname, "fixtures", "support-flow.mesh.json");
 /** Manual Trigger → Agent (mock/echo, no API key needed) → Output. */
 export const ECHO_FIXTURE = path.join(__dirname, "fixtures", "echo-flow.mesh.json");
@@ -148,6 +151,29 @@ export class Editor {
     await this.page.mouse.up();
   }
 
+  edge(id: string) {
+    return this.page.getByTestId(`rf__edge-${id}`);
+  }
+
+  /**
+   * Screen position of the point `fraction` of the way along an edge (its bounding box's centre
+   * isn't on a curved edge).
+   */
+  async edgePoint(id: string, fraction = 0.5) {
+    return this.edge(id)
+      .locator(".react-flow__edge-path")
+      .evaluate((path: SVGPathElement, f) => {
+        const p = path.getPointAtLength(path.getTotalLength() * f);
+        const m = path.getScreenCTM()!;
+        return { x: p.x * m.a + p.y * m.c + m.e, y: p.x * m.b + p.y * m.d + m.f };
+      }, fraction);
+  }
+
+  /** The canvas's right-click menu. */
+  contextMenu() {
+    return this.page.getByRole("menu", { name: "Canvas actions" });
+  }
+
   /** Clicks empty canvas (bottom-left, clear of nodes and controls). */
   async clickEmptyCanvas() {
     await this.page.locator(".react-flow__pane").click({ position: { x: 300, y: 820 } });
@@ -173,8 +199,20 @@ export class Editor {
   }
 }
 
+type FixtureFile = { name: string; mimeType: string; buffer: Buffer };
+
+/** A fixture with every `http://127.0.0.1:8000` replaced by the backend under test's URL. */
+export function fixtureForApi(file: string): FixtureFile {
+  const text = readFileSync(file, "utf8").replaceAll("http://127.0.0.1:8000", API_URL);
+  return { name: path.basename(file), mimeType: "application/json", buffer: Buffer.from(text) };
+}
+
 /** Imports a fixture flow into the open flow (confirming the replace dialog). */
-export async function importFixture(editor: Editor, file = FIXTURE, nodeCount = 4) {
+export async function importFixture(
+  editor: Editor,
+  file: string | FixtureFile = FIXTURE,
+  nodeCount = 4,
+) {
   await editor.page.locator("input[name=import-into-flow]").setInputFiles(file);
   await editor.page.getByRole("button", { name: "Replace" }).click();
   await expect(editor.nodes).toHaveCount(nodeCount);

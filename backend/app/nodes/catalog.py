@@ -17,6 +17,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
+from app.llm.models import FALLBACK_MODEL
 from app.schemas.flow import RESERVED_REFS
 from app.schemas.node_types import NodeCategory, NodeType, category_of
 
@@ -39,8 +40,19 @@ class OptionSpec(_Spec):
 
 #: `knowledge_base` holds the id of one of the user's knowledge bases (picked from a list);
 #: `credential` the id of one of their saved API keys (empty = automatic, see `providers`).
+#: `model` holds an LLM model name (any text; the editor suggests the models the server offers,
+#: see app/llm/models.py and GET /models).
 FieldKind = Literal[
-    "text", "textarea", "code", "number", "select", "switch", "json", "knowledge_base", "credential"
+    "text",
+    "textarea",
+    "code",
+    "number",
+    "select",
+    "switch",
+    "json",
+    "knowledge_base",
+    "credential",
+    "model",
 ]
 
 
@@ -139,17 +151,6 @@ TOOL = HandleSpec(id="tool", kind="tool")
 
 TEMPLATE_HELP = "Use {{input}} for the previous node's output, or insert another node's output."
 
-# Suggestions only — any LiteLLM model string is accepted. Revisit with the LLM layer (3.8).
-MODEL_SUGGESTIONS = [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "claude-opus-5-5",
-    "claude-sonnet-5-5",
-    "claude-haiku-4-5",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-]
-
 
 def options(*values: str) -> list[OptionSpec]:
     return [OptionSpec(value=v, label=v) for v in values]
@@ -190,7 +191,13 @@ def credential(key: str, label: str, providers: list[str], **kw: Any) -> FieldSp
 
 def agent_fields(*extra: FieldSpec) -> list[FieldSpec]:
     return [
-        text("model", "Model", suggestions=MODEL_SUGGESTIONS, required=True),
+        FieldSpec(
+            key="model",
+            label="Model",
+            kind="model",
+            required=True,
+            help="Any model LiteLLM supports, e.g. claude-sonnet-5 or gpt-6-sol.",
+        ),
         credential(
             "credential_id",
             "API key",
@@ -321,7 +328,7 @@ _SPECS: list[NodeSpec] = [
                 )
             ),
             {
-                "model": "gpt-4o",
+                "model": FALLBACK_MODEL,
                 "credential_id": None,
                 "system_prompt": "",
                 "prompt": "{{input}}",
@@ -343,7 +350,7 @@ _SPECS: list[NodeSpec] = [
         **with_tool_description(
             agent_fields(number("max_rounds", "Max delegation rounds", 1, 20)),
             {
-                "model": "gpt-4o",
+                "model": FALLBACK_MODEL,
                 "credential_id": None,
                 "system_prompt": "",
                 "prompt": "{{input}}",

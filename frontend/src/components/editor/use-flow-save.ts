@@ -1,10 +1,9 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { FIT_VIEW_OPTIONS } from "@/components/canvas/flow-canvas";
+import { useFitView } from "@/components/canvas/use-fit-view";
 import { ApiError } from "@/lib/api";
 import { contentFingerprint } from "@/lib/flow/fingerprint";
 import { toFlowContent } from "@/lib/flows-api";
@@ -32,7 +31,7 @@ export function useFlowSave() {
   // `save` stable so autosave's timer only restarts on real edits.
   const { mutateAsync } = useSaveFlow();
   const fetchLatest = useFetchLatestFlow();
-  const { fitView } = useReactFlow();
+  const fit = useFitView();
 
   const save = useCallback(
     async ({ overwrite = false }: { overwrite?: boolean } = {}) => {
@@ -76,12 +75,12 @@ export function useFlowSave() {
     try {
       const latest = await fetchLatest(id);
       useFlowStore.getState().loadFlow(latest);
-      requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
+      fit();
       toast.success("Loaded the latest version");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Couldn't load the latest version.");
     }
-  }, [fetchLatest, fitView]);
+  }, [fetchLatest, fit]);
 
   return { save, loadLatest };
 }
