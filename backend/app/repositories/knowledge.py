@@ -8,6 +8,9 @@ Subcollection `documents` (7.2) and chunks in `kb_chunks` (7.3) belong to it and
 Security rules deny every client read and write: the API is the only way in.
 """
 
+# Annotations stay unevaluated: the class's `list` method would shadow the builtin in them.
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,9 +19,12 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from app.core.errors import ApiError, ConflictError, NotFoundError
 from app.schemas.knowledge import (
+    MAX_DOCUMENTS,
+    DocumentStatus,
     KnowledgeBase,
     KnowledgeBaseCreate,
     KnowledgeBaseUpdate,
+    KnowledgeDocument,
     check_overlap,
 )
 
@@ -46,6 +52,16 @@ class EmbeddingModelLockedError(ConflictError):
     )
 
 
+class DocumentNotFoundError(NotFoundError):
+    code = "document_not_found"
+    message = "Document not found."
+
+
+class TooManyDocumentsError(ConflictError):
+    code = "too_many_documents"
+    message = f"A knowledge base can hold up to {MAX_DOCUMENTS} documents. Delete some first."
+
+
 class InvalidKnowledgeBaseSettingsError(ApiError):
     status_code = 422
     code = "invalid_knowledge_base_settings"
@@ -61,6 +77,21 @@ def _to_model(snapshot: Any) -> KnowledgeBase:
         chunk_size=data["chunk_size"],
         chunk_overlap=data["chunk_overlap"],
         document_count=data.get("document_count", 0),
+        created_at=data["created_at"],
+        updated_at=data["updated_at"],
+    )
+
+
+def _to_document(snapshot: Any) -> KnowledgeDocument:
+    data = snapshot.to_dict()
+    return KnowledgeDocument(
+        document_id=snapshot.id,
+        name=data["name"],
+        mime=data["mime"],
+        size=data["size"],
+        status=data["status"],
+        error=data.get("error"),
+        chunk_count=data.get("chunk_count", 0),
         created_at=data["created_at"],
         updated_at=data["updated_at"],
     )
@@ -165,3 +196,88 @@ class KnowledgeBaseRepository:
                 batch.delete(doc.reference)
             await batch.commit()
         await ref.delete()
+
+    # ── Documents (`knowledge_bases/{id}/documents/{document_id}`) ─────────────
+
+    def _documents(self, knowledge_base_id: str) -> Any:
+        return self._collection.document(knowledge_base_id).collection("documents")
+
+    def new_document_id(self, knowledge_base_id: str) -> str:
+        return self._documents(knowledge_base_id).document().id
+
+    async def list_documents(
+        self, owner_uid: str, knowledge_base_id: str
+    ) -> list[KnowledgeDocument]:
+        """Newest first."""
+        self._check_owner(await self._collection.document(knowledge_base_id).get(), owner_uid)
+        found = [_to_document(s) async for s in self._documents(knowledge_base_id).stream()]
+        return sorted(found, key=lambda d: d.created_at, reverse=True)
+
+    async def add_document(
+        self,
+        owner_uid: str,
+        knowledge_base_id: str,
+        document_id: str,
+        *,
+        name: str,
+        mime: str,
+        size: int,
+        storage_path: str,
+    ) -> KnowledgeDocument:
+        """Records an uploaded file as a `pending` document and counts it — one transaction, so the
+        limit and the embedding-model lock (which looks at the count) can't race."""
+        kb_ref = self._collection.document(knowledge_base_id)
+        doc_ref = self._documents(knowledge_base_id).document(document_id)
+
+        @firestore.async_transactional
+        async def apply(transaction: Any) -> None:
+            snapshot = await kb_ref.get(transaction=transaction)
+            self._check_owner(snapshot, owner_uid)
+            if snapshot.get("document_count") >= MAX_DOCUMENTS:
+                raise TooManyDocumentsError()
+            now = datetime.now(UTC)
+            transaction.create(
+                doc_ref,
+                {
+                    "owner_uid": owner_uid,
+                    "name": name,
+                    "source": "upload",
+                    "mime": mime,
+                    "size": size,
+                    "storage_path": storage_path,
+                    "status": DocumentStatus.PENDING.value,
+                    "error": None,
+                    "chunk_count": 0,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            transaction.update(
+                kb_ref, {"document_count": firestore.Increment(1), "updated_at": now}
+            )
+
+        await apply(self._db.transaction())
+        return _to_document(await doc_ref.get())
+
+    async def delete_document(
+        self, owner_uid: str, knowledge_base_id: str, document_id: str
+    ) -> str:
+        """Deletes the record and uncounts it; returns its file's storage path (for the caller to
+        delete)."""
+        kb_ref = self._collection.document(knowledge_base_id)
+        doc_ref = self._documents(knowledge_base_id).document(document_id)
+
+        @firestore.async_transactional
+        async def apply(transaction: Any) -> str:
+            self._check_owner(await kb_ref.get(transaction=transaction), owner_uid)
+            document = await doc_ref.get(transaction=transaction)
+            if not document.exists:
+                raise DocumentNotFoundError()
+            transaction.delete(doc_ref)
+            transaction.update(
+                kb_ref,
+                {"document_count": firestore.Increment(-1), "updated_at": datetime.now(UTC)},
+            )
+            return document.get("storage_path")
+
+        return await apply(self._db.transaction())

@@ -19,4 +19,17 @@ export function formatRelativeTime(date: Date | string, now: Date = new Date()):
   return relative.format(Math.round(seconds / 60) || -1, "minute");
 }
 
+/** 1536 → "1.5 KB", 10485760 → "10 MB". */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 ? Math.round(value) : Math.round(value * 10) / 10} ${units[unit]}`;
+}
+
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;

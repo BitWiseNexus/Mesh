@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatRelativeTime, plural } from "./format";
+import { formatBytes, formatRelativeTime, plural } from "./format";
 
 const now = new Date("2026-10-07T12:00:00Z");
 const ago = (seconds: number) => new Date(now.getTime() - seconds * 1000);
@@ -29,5 +29,16 @@ describe("plural", () => {
     expect(plural(1, "node")).toBe("1 node");
     expect(plural(3, "node")).toBe("3 nodes");
     expect(plural(0, "flow")).toBe("0 flows");
+  });
+});
+
+describe("formatBytes", () => {
+  it("uses the largest unit that fits, with one decimal below 10", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(1023)).toBe("1023 B");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(20 * 1024)).toBe("20 KB");
+    expect(formatBytes(10_485_760)).toBe("10 MB");
+    expect(formatBytes(3 * 1024 ** 3)).toBe("3 GB");
   });
 });

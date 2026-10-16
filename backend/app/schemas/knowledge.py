@@ -1,6 +1,7 @@
 """Knowledge bases (`/knowledge-bases`): a user's collections of documents that flows search."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -57,5 +58,36 @@ class KnowledgeBase(BaseModel):
     chunk_size: int
     chunk_overlap: int
     document_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# ── Documents ─────────────────────────────────────────────────────────────
+
+MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_DOCUMENTS = 500
+MAX_DOCUMENT_NAME_LENGTH = 200
+
+
+class DocumentStatus(StrEnum):
+    #: Uploaded, waiting to be split into chunks and embedded.
+    PENDING = "pending"
+    PROCESSING = "processing"
+    #: Searchable.
+    READY = "ready"
+    #: Couldn't be processed (`error` says why).
+    FAILED = "failed"
+
+
+class KnowledgeDocument(BaseModel):
+    document_id: str
+    name: str
+    #: `application/pdf`, `text/plain` or `text/markdown`.
+    mime: str
+    #: Bytes.
+    size: int
+    status: DocumentStatus
+    error: str | None = None
+    chunk_count: int = 0
     created_at: datetime
     updated_at: datetime

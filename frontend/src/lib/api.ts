@@ -96,7 +96,8 @@ export function createApiClient(getIdToken: GetIdToken, fetchImpl: typeof fetch 
     if (!token) throw new ApiError(401, "missing_token", "Sign in to continue.");
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
-    if (init.body !== undefined && !headers.has("Content-Type")) {
+    // FormData (file uploads): the browser sets the multipart Content-Type with its boundary.
+    if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
     try {

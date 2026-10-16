@@ -39,6 +39,11 @@ def make_app(timeout: float = 0.2) -> FastAPI:
     async def slow() -> None:
         await asyncio.sleep(5)
 
+    @app.post("/upload")
+    async def upload() -> dict[str, bool]:
+        await asyncio.sleep(0.4)  # longer than the timeout
+        return {"ok": True}
+
     @app.get("/missing")
     async def missing() -> None:
         raise NotFoundError()
@@ -93,6 +98,13 @@ def test_domain_errors_are_untouched(client: TestClient) -> None:
 def test_event_streams_have_no_timeout(client: TestClient) -> None:
     response = client.get("/runs/r/stream")
     assert response.status_code == 200 and response.text == "data: ok\n\n"
+
+
+def test_uploads_get_more_time(client: TestClient) -> None:
+    """A multipart body takes as long as the connection needs: it gets `upload_timeout`."""
+    uploaded = client.post("/upload", files={"file": ("a.txt", b"hello", "text/plain")})
+    assert uploaded.status_code == 200
+    assert client.post("/upload", json={"x": 1}).status_code == 503
 
 
 def test_the_real_app_answers_a_down_database_with_503_and_cors() -> None:

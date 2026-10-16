@@ -7,7 +7,8 @@ message}}` body:
 
 - database unreachable (e.g. the Firestore emulator isn't running) → 503 `database_unavailable`
 - a request taking longer than `timeout` (the Firestore client retries an unreachable database
-  for minutes) → 503 `server_timeout`; event streams (`…/stream`) are exempt
+  for minutes) → 503 `server_timeout`; file uploads (multipart bodies, which take as long as the
+  connection needs) get `upload_timeout`; event streams (`…/stream`) are exempt
 - anything else → 500 `internal_error`, logged with its traceback
 
 Domain errors (ApiError, HTTPException, validation) never get here: FastAPI handles them first.
@@ -45,9 +46,10 @@ def describe(exc: BaseException) -> tuple[int, str, str]:
 
 
 class ErrorGuardMiddleware:
-    def __init__(self, app: ASGIApp, timeout: float) -> None:
+    def __init__(self, app: ASGIApp, timeout: float, upload_timeout: float = 300) -> None:
         self.app = app
         self.timeout = timeout
+        self.upload_timeout = upload_timeout
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -62,11 +64,13 @@ class ErrorGuardMiddleware:
             await send(message)
 
         streaming = scope["path"].endswith("/stream")
+        content_type = dict(scope["headers"]).get(b"content-type", b"")
+        timeout = self.upload_timeout if content_type.startswith(b"multipart/") else self.timeout
         try:
             if streaming:
                 await self.app(scope, receive, tracking_send)
             else:
-                async with asyncio.timeout(self.timeout):
+                async with asyncio.timeout(timeout):
                     await self.app(scope, receive, tracking_send)
         except Exception as exc:
             if started:

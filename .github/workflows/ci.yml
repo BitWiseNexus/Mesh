@@ -34,10 +34,10 @@ jobs:
 
       # Inside emulators:exec so the Auth/Firestore integration tests run; REQUIRE_EMULATORS makes
       # them fail (instead of skip) if the emulators somehow aren't reachable.
-      - name: Tests (with Auth + Firestore emulators)
+      - name: Tests (with Auth + Firestore + Storage emulators)
         env:
           REQUIRE_EMULATORS: "1"
-        run: firebase emulators:exec --only auth,firestore --project demo-mesh "cd backend && uv run pytest -ra"
+        run: firebase emulators:exec --only auth,firestore,storage --project demo-mesh "cd backend && uv run pytest -ra"
 
   frontend:
     name: Frontend · lint, types, unit tests, build

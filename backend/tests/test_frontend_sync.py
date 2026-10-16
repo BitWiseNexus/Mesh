@@ -59,5 +59,12 @@ def test_knowledge_base_limits_match() -> None:
     file = TYPES_DIR / "knowledge.ts"
     assert ts_number("MAX_KB_NAME_LENGTH", file) == knowledge.MAX_NAME_LENGTH
     assert ts_number("MAX_KB_DESCRIPTION_LENGTH", file) == knowledge.MAX_DESCRIPTION_LENGTH
-    for name in ("DEFAULT_CHUNK_SIZE", "DEFAULT_CHUNK_OVERLAP", "MIN_CHUNK_SIZE", "MAX_CHUNK_SIZE"):
+    names = (
+        "DEFAULT_CHUNK_SIZE",
+        "DEFAULT_CHUNK_OVERLAP",
+        "MIN_CHUNK_SIZE",
+        "MAX_CHUNK_SIZE",
+        "MAX_DOCUMENT_BYTES",
+    )
+    for name in names:
         assert ts_number(name, file) == getattr(knowledge, name), name

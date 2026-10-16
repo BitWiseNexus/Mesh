@@ -10,8 +10,10 @@ import pytest
 # by default: the API tests wipe Firestore between tests, which would delete the developer's flows.
 _AUTH_HOST = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "")
 _FIRESTORE_HOST = os.environ.get("FIRESTORE_EMULATOR_HOST", "")
+_STORAGE_HOST = os.environ.get("FIREBASE_STORAGE_EMULATOR_HOST", "")
 AUTH_EMULATOR = f"http://{_AUTH_HOST}"
 FIRESTORE_EMULATOR = f"http://{_FIRESTORE_HOST}"
+STORAGE_EMULATOR = f"http://{_STORAGE_HOST}"
 
 
 def _reachable(url: str) -> bool:
@@ -37,6 +39,7 @@ def requires_emulator(url: str, name: str) -> pytest.MarkDecorator:
 
 requires_auth_emulator = requires_emulator(AUTH_EMULATOR, "Firebase Auth")
 requires_firestore_emulator = requires_emulator(FIRESTORE_EMULATOR, "Firestore")
+requires_storage_emulator = requires_emulator(STORAGE_EMULATOR, "Storage")
 
 
 def emulator_sign_up(email: str, password: str = "secret123") -> str:

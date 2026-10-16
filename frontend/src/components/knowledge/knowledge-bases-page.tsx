@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, Library, MoreHorizontal, Plus, Settings2, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -45,14 +46,13 @@ function KnowledgeBaseCard({
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-medium">
-            {/* The button's ::after covers the card, so the whole card opens it. */}
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-left outline-none after:absolute after:inset-0 after:rounded-xl"
+            {/* The link's ::after covers the card, so the whole card opens it. */}
+            <Link
+              href={`/knowledge/${kb.knowledge_base_id}`}
+              className="outline-none after:absolute after:inset-0 after:rounded-xl"
             >
               {kb.name}
-            </button>
+            </Link>
           </h2>
           <p className="line-clamp-2 text-sm text-muted-foreground">
             {kb.description || "No description"}

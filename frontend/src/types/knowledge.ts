@@ -41,3 +41,35 @@ export function chunkSettingsProblem(size: number, overlap: number): string | nu
   }
   return null;
 }
+
+// ── Documents ─────────────────────────────────────────────────────────────
+
+export const MAX_DOCUMENT_BYTES = 10_485_760; // 10 MB
+/** What can be uploaded (the backend also checks the content). */
+export const DOCUMENT_EXTENSIONS = [".pdf", ".txt", ".text", ".md", ".markdown"];
+
+export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
+
+export interface KnowledgeDocument {
+  document_id: string;
+  name: string;
+  mime: string;
+  size: number;
+  status: DocumentStatus;
+  error: string | null;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Why a file can't be uploaded (checked before sending it), or null. */
+export function uploadProblem(file: { name: string; size: number }): string | null {
+  const dot = file.name.lastIndexOf(".");
+  const extension = dot >= 0 ? file.name.slice(dot).toLowerCase() : "";
+  if (!DOCUMENT_EXTENSIONS.includes(extension)) {
+    return `“${file.name}”: upload PDF, plain-text (.txt) or Markdown (.md) files.`;
+  }
+  if (file.size === 0) return `“${file.name}” is empty.`;
+  if (file.size > MAX_DOCUMENT_BYTES) return `“${file.name}” is larger than 10 MB.`;
+  return null;
+}

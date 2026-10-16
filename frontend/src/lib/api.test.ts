@@ -33,6 +33,16 @@ describe("createApiClient", () => {
     expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
   });
 
+  it("leaves the Content-Type of form uploads to the browser (multipart boundary)", async () => {
+    const { api, fetchMock } = setup([json(201, { id: "d1" })]);
+    const form = new FormData();
+    form.append("file", new Blob(["hi"]), "a.txt");
+    await api.request("/knowledge-bases/k/documents", { method: "POST", body: form });
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.body).toBe(form);
+    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
   it("refreshes the token and retries once on an expired session", async () => {
     const { api, getIdToken, authHeader } = setup([
       json(401, { detail: { code: "token_expired", message: "expired" } }),
