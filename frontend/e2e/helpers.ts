@@ -151,6 +151,21 @@ export class Editor {
     await this.page.mouse.up();
   }
 
+  /**
+   * Waits until the canvas stops moving: fitting the view is animated (300 ms, after two frames),
+   * and positions measured during it are stale by the time the mouse gets there.
+   */
+  async steadyView() {
+    const viewport = this.page.locator(".react-flow__viewport");
+    let last: string | null = null;
+    await expect(async () => {
+      const now = await viewport.getAttribute("style");
+      const steady = now === last;
+      last = now;
+      expect(steady, "the canvas is still moving").toBe(true);
+    }).toPass({ intervals: [150], timeout: 5000 });
+  }
+
   edge(id: string) {
     return this.page.getByTestId(`rf__edge-${id}`);
   }
@@ -218,6 +233,7 @@ export async function importFixture(
   await expect(editor.nodes).toHaveCount(nodeCount);
   // Wait for the dialog (and its fading backdrop) to be gone: forced drops would land on it.
   await expect(editor.page.getByRole("alertdialog")).toHaveCount(0);
+  await editor.steadyView();
 }
 
 /**

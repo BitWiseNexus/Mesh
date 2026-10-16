@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import llm
-from app.api import credentials, flows, health, me, models, runs
+from app.api import credentials, flows, health, knowledge, me, models, runs
 from app.core.config import get_settings
 from app.core.crypto import get_cipher
 from app.core.errors import register_error_handlers
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.router)
     app.include_router(credentials.router)
     app.include_router(models.router)
+    app.include_router(knowledge.router)
     register_error_handlers(app)
     return app
 

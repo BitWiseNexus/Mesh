@@ -53,6 +53,9 @@ beforeEach(async () => {
     await setDoc(doc(db, "runs/alice-run/state/checkpoint"), { data: "…", owner_uid: "alice" });
     await setDoc(doc(db, "credentials/alice-openai"), { owner_uid: "alice", ciphertext: "…" });
     await setDoc(doc(db, "users/alice"), { name: "Alice" });
+    await setDoc(doc(db, "knowledge_bases/alice-kb"), { owner_uid: "alice", name: "Docs" });
+    await setDoc(doc(db, "knowledge_bases/alice-kb/documents/d1"), { name: "faq.md" });
+    await setDoc(doc(db, "kb_chunks/c1"), { owner_uid: "alice", kb_id: "alice-kb", text: "…" });
   });
 });
 
@@ -106,6 +109,23 @@ describe("credentials", () => {
     await assertFails(
       getDocs(query(collection(as("alice"), "credentials"), where("owner_uid", "==", "alice"))),
     );
+  });
+});
+
+describe("knowledge bases", () => {
+  it("their documents and chunks are never readable or writable from a client, even by the owner", async () => {
+    const db = as("alice");
+    await assertFails(getDoc(doc(db, "knowledge_bases", "alice-kb")));
+    await assertFails(
+      getDocs(query(collection(db, "knowledge_bases"), where("owner_uid", "==", "alice"))),
+    );
+    await assertFails(getDoc(doc(db, "knowledge_bases/alice-kb/documents/d1")));
+    await assertFails(getDocs(collection(db, "knowledge_bases/alice-kb/documents")));
+    await assertFails(
+      getDocs(query(collection(db, "kb_chunks"), where("owner_uid", "==", "alice"))),
+    );
+    await assertFails(setDoc(doc(db, "knowledge_bases", "new"), { owner_uid: "alice" }));
+    await assertFails(setDoc(doc(db, "kb_chunks", "new"), { owner_uid: "alice" }));
   });
 });
 

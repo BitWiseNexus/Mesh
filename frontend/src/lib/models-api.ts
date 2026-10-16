@@ -18,10 +18,19 @@ export interface ProviderModels {
   recommended: string[];
 }
 
+export interface EmbeddingModelOption {
+  id: string;
+  label: string;
+  key: ProviderModels["key"];
+}
+
 export interface ModelList {
   providers: ProviderModels[];
   /** What new agents get (a provider the user has a key for, else the mock model in dev). */
   default: string;
+  /** For knowledge bases (all of them produce vectors of the same size). */
+  embedding_models: EmbeddingModelOption[];
+  default_embedding_model: string;
 }
 
 export const modelKeys = { list: ["models"] as const };

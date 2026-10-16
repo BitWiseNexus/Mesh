@@ -84,6 +84,19 @@ def server_has_key(provider: str) -> bool:
     )
 
 
+def server_providers() -> set[str]:
+    """The LLM providers the server has a key for."""
+    return {p for p in PROVIDER_ORDER if server_has_key(p)}
+
+
+def key_source(provider: str | None, saved: list[str], server: set[str]) -> str:
+    """Where a call to `provider` would get its key: `saved` (one of the user's keys), `server`,
+    `none` — or `not_needed` (no provider: mock models)."""
+    if provider is None:
+        return "not_needed"
+    return "saved" if provider in saved else "server" if provider in server else "none"
+
+
 def choose_default(saved: list[str], server: set[str], mocks: bool) -> str:
     """The model new agents get: the provider of the user's newest saved key, else one the server
     has a key for, else the mock model (when allowed), else the catalog default."""
@@ -97,7 +110,7 @@ def model_list(saved: list[str]) -> tuple[list[ProviderModels], str]:
     """Every provider's models and where its key comes from; `saved` = providers of the user's
     saved keys, newest first. Returns (providers, default model)."""
     settings = get_settings()
-    server = {p for p in PROVIDER_ORDER if server_has_key(p)}
+    server = server_providers()
     providers: list[ProviderModels] = []
     for provider in PROVIDER_ORDER:
         recommended = RECOMMENDED[provider]
@@ -106,7 +119,7 @@ def model_list(saved: list[str]) -> tuple[list[ProviderModels], str]:
             ProviderModels(
                 id=provider,
                 name=_PROVIDERS[provider][0],
-                key="saved" if provider in saved else "server" if provider in server else "none",
+                key=key_source(provider, saved, server),
                 prefixes=[prefix for prefix, p in _PREFIXES.items() if p == provider],
                 models=[*recommended, *rest],
                 recommended=recommended,

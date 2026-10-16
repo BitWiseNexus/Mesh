@@ -134,12 +134,20 @@ test("right-click menus for nodes, the selection, edges and the canvas", async (
   await expect(editor.edges).toHaveCount(1);
 });
 
-/** Drags a connection from a handle and drops it on empty canvas at (x, y) in page coordinates. */
+/**
+ * Drags a connection from a handle and drops it at (x, y) in page coordinates, which must be empty
+ * canvas (a drop on a node doesn't open the picker).
+ */
 async function dragConnectionTo(editor: Editor, handle: Locator, x: number, y: number) {
   const box = (await handle.boundingBox())!;
   await editor.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await editor.page.mouse.down();
   await editor.page.mouse.move(x, y, { steps: 15 });
+  // A connection is being drawn (the drag started on the handle, not beside it)…
+  await expect(editor.page.locator(".react-flow__connectionline")).toBeVisible();
+  // …and it ends over empty canvas.
+  const target = await editor.page.evaluate(([px, py]) => document.elementFromPoint(px, py)?.className, [x, y]);
+  expect(String(target), "the drop point must be empty canvas").toContain("react-flow__pane");
   await editor.page.mouse.up();
 }
 
@@ -181,8 +189,9 @@ test("drop a connection on empty canvas to add a connected node", async ({ edito
   expect(draft.edges.at(-1)).toMatchObject({ source: "node_a", type: "tool_connection" });
   await editor.readyToRun();
 
-  // Escape closes the picker without adding anything.
-  await dragConnectionTo(editor, editor.handle("Output", "in", "target"), agentBox.x + 120, agentBox.y + 300);
+  // Escape closes the picker without adding anything. (Above the flow: the tool just added sits
+  // below the agent, where this used to drop — onto the tool on CI's taller font.)
+  await dragConnectionTo(editor, editor.handle("Output", "in", "target"), agentBox.x + 120, agentBox.y - 200);
   await expect(picker(editor)).toContainText("Connect a new node");
   await page.keyboard.press("Escape");
   await expect(picker(editor)).toHaveCount(0);

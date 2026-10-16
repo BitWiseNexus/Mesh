@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas import EdgeType, NodeCategory, NodeType
+from app.schemas import EdgeType, NodeCategory, NodeType, knowledge
 from app.schemas.credentials import CredentialProvider
 from app.schemas.flow import MAX_DESCRIPTION_LENGTH, MAX_EDGES, MAX_NAME_LENGTH, MAX_NODES
 
@@ -53,3 +53,11 @@ def test_flow_limits_match() -> None:
     assert ts_number("MAX_FLOW_DESCRIPTION_LENGTH") == MAX_DESCRIPTION_LENGTH
     assert ts_number("MAX_FLOW_NODES") == MAX_NODES
     assert ts_number("MAX_FLOW_EDGES") == MAX_EDGES
+
+
+def test_knowledge_base_limits_match() -> None:
+    file = TYPES_DIR / "knowledge.ts"
+    assert ts_number("MAX_KB_NAME_LENGTH", file) == knowledge.MAX_NAME_LENGTH
+    assert ts_number("MAX_KB_DESCRIPTION_LENGTH", file) == knowledge.MAX_DESCRIPTION_LENGTH
+    for name in ("DEFAULT_CHUNK_SIZE", "DEFAULT_CHUNK_OVERLAP", "MIN_CHUNK_SIZE", "MAX_CHUNK_SIZE"):
+        assert ts_number(name, file) == getattr(knowledge, name), name

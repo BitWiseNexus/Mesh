@@ -31,6 +31,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Knowledge bases (Phase 7): their documents and chunks go through the API only (uploads,
+    // ingestion, embeddings, owner checks), so clients can't read or write any of it.
+    match /knowledge_bases/{knowledgeBaseId}/{document=**} {
+      allow read, write: if false;
+    }
+    match /knowledge_bases/{knowledgeBaseId} {
+      allow read, write: if false;
+    }
+    match /kb_chunks/{chunkId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
