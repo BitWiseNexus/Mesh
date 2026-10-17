@@ -7,6 +7,7 @@ import {
   Clock,
   FileText,
   Loader2,
+  RotateCw,
   Settings2,
   Trash2,
   Upload,
@@ -27,6 +28,7 @@ import {
   useDeleteKnowledgeBase,
   useDocuments,
   useKnowledgeBase,
+  useRetryDocument,
   useUploadDocument,
 } from "@/lib/knowledge-api";
 import { useModels } from "@/lib/models-api";
@@ -62,9 +64,11 @@ function StatusBadge({ document }: { document: KnowledgeDocument }) {
 
 function DocumentRow({
   document,
+  onRetry,
   onDelete,
 }: {
   document: KnowledgeDocument;
+  onRetry: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -80,6 +84,12 @@ function DocumentRow({
         )}
       </div>
       <StatusBadge document={document} />
+      {document.status === "failed" && (
+        <Button variant="ghost" size="sm" onClick={onRetry} aria-label={`Retry ${document.name}`}>
+          <RotateCw />
+          Retry
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"
@@ -98,6 +108,7 @@ function KnowledgeBaseView({ id }: { id: string }) {
   const models = useModels();
   const upload = useUploadDocument(id);
   const deleteDocument = useDeleteDocument(id);
+  const retryDocument = useRetryDocument(id);
   const deleteKnowledgeBase = useDeleteKnowledgeBase();
   const router = useRouter();
   const [confirm, confirmDialog] = useConfirm();
@@ -299,6 +310,12 @@ function KnowledgeBaseView({ id }: { id: string }) {
               <DocumentRow
                 key={document.document_id}
                 document={document}
+                onRetry={() =>
+                  retryDocument.mutate(document.document_id, {
+                    onError: (error) =>
+                      toast.error(errorMessage(error, "Couldn't retry the document.")),
+                  })
+                }
                 onDelete={() => void onDeleteDocument(document)}
               />
             ))}

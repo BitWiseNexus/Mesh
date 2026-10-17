@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from google.api_core import exceptions as google_errors
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -259,6 +260,15 @@ class KnowledgeBaseRepository:
         await apply(self._db.transaction())
         return _to_document(await doc_ref.get())
 
+    async def get_document(
+        self, owner_uid: str, knowledge_base_id: str, document_id: str
+    ) -> KnowledgeDocument:
+        self._check_owner(await self._collection.document(knowledge_base_id).get(), owner_uid)
+        snapshot = await self._documents(knowledge_base_id).document(document_id).get()
+        if not snapshot.exists:
+            raise DocumentNotFoundError()
+        return _to_document(snapshot)
+
     async def delete_document(
         self, owner_uid: str, knowledge_base_id: str, document_id: str
     ) -> str:
@@ -281,3 +291,39 @@ class KnowledgeBaseRepository:
             return document.get("storage_path")
 
         return await apply(self._db.transaction())
+
+    # ── For processing (internal: no owner check — callers pass ids they got from the API) ──
+
+    async def document_record(
+        self, knowledge_base_id: str, document_id: str
+    ) -> dict[str, Any] | None:
+        """A document's stored fields (incl. owner_uid and storage_path), or None if it's gone."""
+        snapshot = await self._documents(knowledge_base_id).document(document_id).get()
+        return snapshot.to_dict() if snapshot.exists else None
+
+    async def knowledge_base_record(self, knowledge_base_id: str) -> dict[str, Any] | None:
+        snapshot = await self._collection.document(knowledge_base_id).get()
+        return snapshot.to_dict() if snapshot.exists else None
+
+    async def set_document_status(
+        self,
+        knowledge_base_id: str,
+        document_id: str,
+        status: DocumentStatus,
+        *,
+        error: str | None = None,
+        chunk_count: int | None = None,
+    ) -> bool:
+        """False if the document no longer exists (deleted while it was being processed)."""
+        fields: dict[str, Any] = {
+            "status": status.value,
+            "error": error,
+            "updated_at": datetime.now(UTC),
+        }
+        if chunk_count is not None:
+            fields["chunk_count"] = chunk_count
+        try:
+            await self._documents(knowledge_base_id).document(document_id).update(fields)
+        except google_errors.NotFound:
+            return False
+        return True

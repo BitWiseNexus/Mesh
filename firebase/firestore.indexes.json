@@ -31,6 +31,23 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "kb_chunks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kb_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "embedding",
+          "vectorConfig": {
+            "dimension": 768,
+            "flat": {}
+          }
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -47,6 +64,11 @@
     {
       "collectionGroup": "runs",
       "fieldPath": "input",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "kb_chunks",
+      "fieldPath": "text",
       "indexes": []
     }
   ]

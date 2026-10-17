@@ -91,6 +91,10 @@ async def save_file(path: str, file: CheckedFile) -> None:
     await asyncio.to_thread(upload)
 
 
+async def read_file(path: str) -> bytes:
+    return await asyncio.to_thread(lambda: get_bucket().blob(path).download_as_bytes())
+
+
 async def delete_file(path: str) -> None:
     """Best effort: a file that's already gone is fine; other failures are logged, not raised
     (the record is already deleted — an orphaned file only costs storage)."""

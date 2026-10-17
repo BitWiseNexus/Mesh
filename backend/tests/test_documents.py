@@ -1,26 +1,22 @@
 """Knowledge-base documents: file checks, and upload / list / delete through the API (Firestore and
 Storage emulators)."""
 
-import urllib.request
-from collections.abc import Iterator
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 
 import app.api.knowledge as knowledge_api
-import app.llm.models as models
 import app.repositories.knowledge as knowledge_repo
 import app.services.documents as documents
 from app.core.auth import AuthUser, get_current_user
 from app.core.errors import ApiError
-from app.core.firebase import get_bucket, get_db
+from app.core.firebase import get_bucket
 from app.main import app
 from tests.conftest import (
     FIRESTORE_EMULATOR,
     requires_firestore_emulator,
     requires_storage_emulator,
 )
+from tests.knowledge import new_kb, upload
 
 CLEAR_URL = f"{FIRESTORE_EMULATOR}/emulator/v1/projects/demo-mesh/databases/(default)/documents"
 PDF = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
@@ -75,28 +71,8 @@ def test_long_names_are_shortened() -> None:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    urllib.request.urlopen(urllib.request.Request(CLEAR_URL, method="DELETE"), timeout=5)
-    monkeypatch.setattr(models, "server_has_key", lambda provider: False)
-    get_db.cache_clear()
-    with TestClient(app) as test_client:
-        app.dependency_overrides[get_current_user] = lambda: AuthUser(uid="alice")
-        yield test_client
-    app.dependency_overrides.clear()
-    get_db.cache_clear()
-
-
-def new_kb(client: TestClient) -> str:
-    response = client.post("/knowledge-bases", json={"name": "Docs"})
-    assert response.status_code == 201
-    return response.json()["knowledge_base_id"]
-
-
-def upload(
-    client: TestClient, kb_id: str, name: str = "faq.md", data: bytes = b"# FAQ\nYes."
-) -> Any:
-    files = {"file": (name, data, "application/octet-stream")}
-    return client.post(f"/knowledge-bases/{kb_id}/documents", files=files)
+def client(kb_client: TestClient) -> TestClient:
+    return kb_client
 
 
 def stored(path: str) -> bool:

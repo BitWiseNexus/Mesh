@@ -1,14 +1,11 @@
 """Knowledge bases: the /knowledge-bases API (Firestore emulator) and embedding-model choice."""
 
 import asyncio
-import urllib.request
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-import app.llm.models as models
 import app.repositories.knowledge as knowledge_repo
 from app.core.auth import AuthUser, get_current_user
 from app.core.config import Settings
@@ -62,15 +59,8 @@ def test_the_mock_embedding_model_is_only_offered_outside_production(
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    urllib.request.urlopen(urllib.request.Request(CLEAR_URL, method="DELETE"), timeout=5)
-    monkeypatch.setattr(models, "server_has_key", lambda provider: False)
-    get_db.cache_clear()
-    with TestClient(app) as test_client:
-        app.dependency_overrides[get_current_user] = lambda: AuthUser(uid="alice")
-        yield test_client
-    app.dependency_overrides.clear()
-    get_db.cache_clear()
+def client(kb_client: TestClient) -> TestClient:
+    return kb_client
 
 
 def as_user(uid: str) -> None:

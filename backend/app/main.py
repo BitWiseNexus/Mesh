@@ -12,6 +12,7 @@ from app.core.crypto import get_cipher
 from app.core.errors import register_error_handlers
 from app.core.firebase import init_firebase
 from app.core.middleware import ErrorGuardMiddleware
+from app.services.ingestion import IngestionManager
 from app.services.runs import RunManager
 
 
@@ -20,10 +21,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_firebase()
     get_cipher()  # refuse to start without an encryption key where one is required
     app.state.runs = RunManager(get_settings())
+    app.state.ingestion = IngestionManager()
     # LiteLLM takes seconds to import; do it now, off the event loop, not on the first run.
     asyncio.get_running_loop().run_in_executor(None, llm.warm_up)
     yield
     await app.state.runs.shutdown()
+    await app.state.ingestion.shutdown()
 
 
 def create_app() -> FastAPI:

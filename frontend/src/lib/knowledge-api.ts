@@ -26,6 +26,8 @@ export function knowledgeApi(api: ApiClient) {
     },
     removeDocument: (id: string, documentId: string) =>
       api.delete(`${path(id)}/documents/${encodeURIComponent(documentId)}`),
+    retryDocument: (id: string, documentId: string) =>
+      api.post<KnowledgeDocument>(`${path(id)}/documents/${encodeURIComponent(documentId)}/retry`),
   };
 }
 
@@ -148,5 +150,18 @@ export function useDeleteDocument(id: string) {
       );
       refresh();
     },
+  });
+}
+
+/** Processes a (failed) document again. */
+export function useRetryDocument(id: string) {
+  const knowledge = useKnowledgeApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) => knowledge.retryDocument(id, documentId),
+    onSuccess: (document) =>
+      queryClient.setQueryData<KnowledgeDocument[]>(knowledgeKeys.documents(id), (list) =>
+        list?.map((d) => (d.document_id === document.document_id ? document : d)),
+      ),
   });
 }

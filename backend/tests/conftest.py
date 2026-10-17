@@ -2,8 +2,10 @@ import json
 import os
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
 
 # Emulator tests run only against emulators named explicitly in the environment, as
 # `firebase emulators:exec` does (`npm run test:backend`, CI). Never against the `npm run dev` ones
@@ -51,3 +53,23 @@ def emulator_sign_up(email: str, password: str = "secret123") -> str:
     )
     with urllib.request.urlopen(req, timeout=5) as resp:
         return json.load(resp)["idToken"]
+
+
+@pytest.fixture
+def kb_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """API client signed in as "alice" against an emptied Firestore emulator, with no server-side
+    LLM keys (so model defaults are predictable). For the knowledge-base API tests."""
+    import app.llm.models as models
+    from app.core.auth import AuthUser, get_current_user
+    from app.core.firebase import get_db
+    from app.main import app
+
+    clear = f"{FIRESTORE_EMULATOR}/emulator/v1/projects/demo-mesh/databases/(default)/documents"
+    urllib.request.urlopen(urllib.request.Request(clear, method="DELETE"), timeout=5)
+    monkeypatch.setattr(models, "server_has_key", lambda provider: False)
+    get_db.cache_clear()
+    with TestClient(app) as test_client:
+        app.dependency_overrides[get_current_user] = lambda: AuthUser(uid="alice")
+        yield test_client
+    app.dependency_overrides.clear()
+    get_db.cache_clear()

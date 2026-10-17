@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, openDashboard, test } from "./helpers";
 
 test("create, change and delete knowledge bases", async ({ page }) => {
@@ -68,20 +71,33 @@ test("upload, list and delete a knowledge base's documents", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Docs", exact: true })).toBeVisible();
   await expect(page.getByText("No documents yet")).toBeVisible();
 
-  // Several files at once: the image is refused before uploading, the fake PDF by the server.
+  // Several files at once: the image is refused before uploading, the fake PDF by the server; the
+  // rest are processed into chunks (mock embeddings: the test server has no API keys).
   await page.locator("input[name=upload-documents]").setInputFiles([
     file("faq.md", "# FAQ\n\nYes, it works offline."),
     file("photo.png", "png"),
-    file("manual.pdf", "%PDF-1.4\n%%EOF\n"),
+    file("guide.pdf", readFileSync(path.join(__dirname, "fixtures", "guide.pdf"))),
     file("fake.pdf", "not a pdf"),
   ]);
   await expect(page.getByText("“photo.png”: upload PDF, plain-text (.txt) or Markdown (.md) files.")).toBeVisible();
   await expect(page.getByText("“fake.pdf”: “fake.pdf” isn't a valid PDF file.")).toBeVisible();
   const documents = page.getByRole("region", { name: "Documents" }).getByRole("listitem");
   await expect(documents).toHaveCount(2);
-  await expect(documents.first()).toContainText("manual.pdf"); // newest first
-  await expect(page.getByRole("listitem", { name: "faq.md" })).toContainText("Waiting to be processed");
+  await expect(documents.first()).toContainText("guide.pdf"); // newest first
+  await expect(page.getByRole("listitem", { name: "faq.md" })).toContainText("Ready · 1 chunk");
+  await expect(page.getByRole("listitem", { name: "guide.pdf" })).toContainText("Ready · 1 chunk");
   await expect(page.getByText(/^2 documents ·/)).toBeVisible();
+
+  // A document without text fails, with the reason; Retry processes it again.
+  await page.locator("input[name=upload-documents]").setInputFiles([file("blank.md", "   \n\n  ")]);
+  const blank = page.getByRole("listitem", { name: "blank.md" });
+  await expect(blank).toContainText("Failed");
+  await expect(blank).toContainText("No text found in this document.");
+  await blank.getByRole("button", { name: "Retry blank.md" }).click();
+  await expect(blank).toContainText("Failed"); // processed again: still nothing to find
+  await page.getByRole("button", { name: "Delete blank.md" }).click();
+  await page.getByRole("button", { name: "Delete document" }).click();
+  await expect(documents).toHaveCount(2);
 
   // Drag and drop works too.
   const drop = await page.evaluateHandle(() => {
