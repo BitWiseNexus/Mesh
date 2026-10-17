@@ -14,7 +14,8 @@ from google.api_core import exceptions as google_errors
 
 from app.core.errors import ApiError, PayloadTooLargeError
 from app.core.firebase import get_bucket
-from app.schemas.knowledge import MAX_DOCUMENT_BYTES, MAX_DOCUMENT_NAME_LENGTH
+from app.repositories.knowledge import KnowledgeBaseRepository
+from app.schemas.knowledge import MAX_DOCUMENT_BYTES, MAX_DOCUMENT_NAME_LENGTH, KnowledgeDocument
 
 logger = logging.getLogger(__name__)
 
@@ -126,3 +127,32 @@ async def delete_folder(prefix: str) -> None:
         await asyncio.to_thread(delete)
     except Exception:
         logger.exception("Couldn't delete %s* from storage", prefix)
+
+
+async def store(
+    repository: KnowledgeBaseRepository,
+    owner_uid: str,
+    knowledge_base_id: str,
+    filename: str | None,
+    data: bytes,
+) -> KnowledgeDocument:
+    """Checks the file, stores it and records it as a `pending` document (the caller then has it
+    processed). Uploads and the "Add to Knowledge Base" node both come through here."""
+    await repository.get(owner_uid, knowledge_base_id)  # 404 before storing anything
+    checked = check_file(filename, data)
+    document_id = repository.new_document_id(knowledge_base_id)
+    path = file_path(owner_uid, knowledge_base_id, document_id)
+    await save_file(path, checked)
+    try:
+        return await repository.add_document(
+            owner_uid,
+            knowledge_base_id,
+            document_id,
+            name=checked.name,
+            mime=checked.mime,
+            size=len(checked.data),
+            storage_path=path,
+        )
+    except Exception:
+        await delete_file(path)  # not recorded (e.g. the limit): don't keep the file
+        raise

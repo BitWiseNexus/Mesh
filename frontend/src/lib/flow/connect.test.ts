@@ -41,6 +41,7 @@ const connect = (nodeId: string, handleId: string, handleType: "source" | "targe
 describe("pickableTypes", () => {
   it("offers only addable types that fit the dragged handle", () => {
     expect(ADDABLE_TYPES).not.toContain("tool_python"); // "Soon"
+    expect(ADDABLE_TYPES).toContain("kb_retriever");
     expect(ADDABLE_TYPES).not.toContain("kb_notion"); // retired
     expect(pickableTypes(undefined, nodes)).toEqual(ADDABLE_TYPES);
 
@@ -53,12 +54,13 @@ describe("pickableTypes", () => {
     const before = pickableTypes(connect("a", "in", "target"), nodes);
     expect(before).toContain("trigger_manual");
     expect(before).not.toContain("output_display");
-    // An agent's Tools handle: tools and agents (agents can be tools).
+    // An agent's Tools handle: tools, agents and the Retriever (they can be tools).
     expect(pickableTypes(connect("a", "tools", "source"), nodes)).toEqual([
       "agent_node",
       "tool_web_search",
       "tool_web_scraper",
       "tool_http",
+      "kb_retriever",
     ]);
     // A tool's handle, dragged backwards: the agents that can use it.
     expect(pickableTypes(connect("s", "tool", "target"), nodes)).toEqual(["agent_node"]);

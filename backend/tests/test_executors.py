@@ -26,6 +26,8 @@ def test_registered_executors() -> None:
         NodeType.LOGIC_IF,
         NodeType.LOGIC_LOOP,
         NodeType.AGENT_NODE,
+        NodeType.KB_RETRIEVER,
+        NodeType.KB_UPLOAD,
         NodeType.OUTPUT_DISPLAY,
     }
 

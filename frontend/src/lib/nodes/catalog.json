@@ -648,7 +648,7 @@
       "label": "Add to Knowledge Base",
       "description": "Store text produced in this flow (e.g. a scraped page) in a knowledge base.",
       "refPrefix": "kb_add",
-      "outputHint": "The stored document: {id, chunks}",
+      "outputHint": "The stored document, once searchable: {document_id, name, knowledge_base_id, chunk_count}",
       "inputs": [
         {
           "id": "in",
@@ -678,6 +678,7 @@
           "key": "title",
           "label": "Document title",
           "kind": "text",
+          "help": "Stored as a Markdown document with this name.",
           "placeholder": "Defaults to the run time",
           "required": false,
           "templated": true
@@ -686,12 +687,13 @@
           "key": "content",
           "label": "Content",
           "kind": "textarea",
+          "help": "Waits until it's searchable, so a Retriever after this node finds it.",
           "required": true,
           "templated": true,
           "rows": 4
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "kb_retriever",
@@ -699,7 +701,7 @@
       "label": "Retriever",
       "description": "Find relevant chunks in a knowledge base. Works as a step or an agent tool.",
       "refPrefix": "retriever",
-      "outputHint": "Matching chunks: [{text, source, score}]",
+      "outputHint": "Matching passages: [{text, source, page, score}], best first",
       "inputs": [
         {
           "id": "in",
@@ -719,7 +721,8 @@
       "defaultData": {
         "knowledge_base_id": null,
         "query": "{{input}}",
-        "top_k": 4
+        "top_k": 4,
+        "tool_description": ""
       },
       "fields": [
         {
@@ -747,9 +750,19 @@
           "min": 1,
           "max": 20,
           "step": 1
+        },
+        {
+          "key": "tool_description",
+          "label": "Description for the agent",
+          "kind": "textarea",
+          "help": "Used when an agent calls this node as a tool. Leave empty for a default description.",
+          "placeholder": "When should the agent use this, and what does it return?",
+          "required": false,
+          "templated": false,
+          "rows": 2
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "kb_notion",

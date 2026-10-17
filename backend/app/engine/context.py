@@ -24,6 +24,7 @@ from typing import Any, Protocol
 from app.engine import events
 from app.engine.compiler import ExecutionPlan, PlanEdge, PlannedNode
 from app.engine.events import EventSink, LogLevel
+from app.engine.executor import NodeError
 from app.engine.references import InputPart, InvalidPart, RefPart, TextPart, parse_template
 
 
@@ -78,6 +79,28 @@ class NoSecrets:
         return None
 
 
+class Knowledge(Protocol):
+    """The run owner's knowledge bases (app/services/knowledge.py)."""
+
+    async def search(self, knowledge_base_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
+        """The chunks most relevant to `query`: [{text, source, page, score}], best first. Raises
+        NodeError when the knowledge base can't be searched (deleted, not the owner's, no key…)."""
+        ...
+
+    async def add_document(self, knowledge_base_id: str, name: str, text: str) -> dict[str, Any]:
+        """Stores `text` as a document and waits until it's searchable: {document_id, name,
+        knowledge_base_id, chunk_count}. Raises NodeError when it can't be added or processed."""
+        ...
+
+
+class NoKnowledge:
+    async def search(self, knowledge_base_id: str, query: str, top_k: int) -> list[dict[str, Any]]:
+        raise NodeError("Knowledge bases aren't available in this run")
+
+    async def add_document(self, knowledge_base_id: str, name: str, text: str) -> dict[str, Any]:
+        raise NodeError("Knowledge bases aren't available in this run")
+
+
 class RunContext:
     """Everything a run knows: the plan, the run's input and the outputs produced so far."""
 
@@ -89,6 +112,7 @@ class RunContext:
         input: str | None,
         sink: EventSink,
         secrets: Secrets | None = None,
+        knowledge: Knowledge | None = None,
     ):
         self.plan = plan
         self.run_id = run_id
@@ -96,6 +120,7 @@ class RunContext:
         self.input = input
         self.sink = sink
         self.secrets: Secrets = secrets or NoSecrets()
+        self.knowledge: Knowledge = knowledge or NoKnowledge()
         self.outputs: dict[str, Any] = {}
         #: Loop id → how many times it has started its body (see the runner).
         self.iterations: dict[str, int] = {}

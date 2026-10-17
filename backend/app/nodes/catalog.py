@@ -461,8 +461,8 @@ _SPECS: list[NodeSpec] = [
         NodeCategory.KNOWLEDGE,
         type=T.KB_UPLOAD,  # id kept from "Document Upload" so saved flows still load
         ref_prefix="kb_add",
-        output_hint="The stored document: {id, chunks}",
-        coming_soon=True,
+        output_hint="The stored document, once searchable: {document_id, name, knowledge_base_id, "
+        "chunk_count}",
         label="Add to Knowledge Base",
         description="Store text produced in this flow (e.g. a scraped page) in a knowledge base.",
         default_data={"knowledge_base_id": None, "title": "", "content": "{{input}}"},
@@ -473,37 +473,54 @@ _SPECS: list[NodeSpec] = [
                 kind="knowledge_base",
                 required=True,
             ),
-            text("title", "Document title", templated=True, placeholder="Defaults to the run time"),
-            textarea("content", "Content", rows=4, templated=True, required=True),
+            text(
+                "title",
+                "Document title",
+                templated=True,
+                placeholder="Defaults to the run time",
+                help="Stored as a Markdown document with this name.",
+            ),
+            textarea(
+                "content",
+                "Content",
+                rows=4,
+                templated=True,
+                required=True,
+                help="Waits until it's searchable, so a Retriever after this node finds it.",
+            ),
         ],
     ),
     NodeSpec(
         type=T.KB_RETRIEVER,
         ref_prefix="retriever",
-        output_hint="Matching chunks: [{text, source, score}]",
-        coming_soon=True,
+        output_hint="Matching passages: [{text, source, page, score}], best first",
         category=NodeCategory.KNOWLEDGE,
         inputs=[IN, TOOL],
         outputs=[OUT],
         label="Retriever",
         description="Find relevant chunks in a knowledge base. Works as a step or an agent tool.",
-        default_data={"knowledge_base_id": None, "query": "{{input}}", "top_k": 4},
-        fields=[
-            FieldSpec(
-                key="knowledge_base_id",
-                label="Knowledge base",
-                kind="knowledge_base",
-                required=True,
-            ),
-            textarea(
-                "query",
-                "Query",
-                rows=2,
-                templated=True,
-                help="What to search for. When an agent uses this as a tool, it writes the query.",
-            ),
-            number("top_k", "Results (top k)", 1, 20),
-        ],
+        **with_tool_description(
+            [
+                FieldSpec(
+                    key="knowledge_base_id",
+                    label="Knowledge base",
+                    kind="knowledge_base",
+                    required=True,
+                ),
+                textarea(
+                    "query",
+                    "Query",
+                    rows=2,
+                    templated=True,
+                    help=(
+                        "What to search for. When an agent uses this as a tool, it writes the "
+                        "query."
+                    ),
+                ),
+                number("top_k", "Results (top k)", 1, 20),
+            ],
+            {"knowledge_base_id": None, "query": "{{input}}", "top_k": 4},
+        ),
     ),
     step(
         NodeCategory.KNOWLEDGE,

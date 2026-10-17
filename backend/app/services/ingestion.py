@@ -97,7 +97,7 @@ async def _process(job: Job, record: dict, kb: dict, chunks_repo: ChunkRepositor
         api_key = await secrets.get(model.provider)
     vectors = await embed(kb["embedding_model"], [c.text for c in chunks], api_key=api_key)
     await chunks_repo.replace_for_document(
-        job.owner_uid, job.knowledge_base_id, job.document_id, chunks, vectors
+        job.owner_uid, job.knowledge_base_id, job.document_id, record["name"], chunks, vectors
     )
     return len(chunks)
 
@@ -121,6 +121,14 @@ class IngestionManager:
     async def _run(self, job: Job) -> None:
         async with self._slots:
             await ingest(job)
+
+    async def process(self, job: Job) -> None:
+        """Processes the document and waits until it's done (or joins the processing already
+        under way)."""
+        self.submit(job)
+        entry = self._tasks.get(job.document_id)
+        if entry:
+            await asyncio.shield(entry[1])  # a cancelled caller doesn't cancel the processing
 
     async def cancel(self, document_id: str) -> None:
         entry = self._tasks.get(document_id)

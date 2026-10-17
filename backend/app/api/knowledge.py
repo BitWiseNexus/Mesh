@@ -140,25 +140,9 @@ async def upload_document(
     and recorded as `pending`, then processed into searchable chunks. 415
     `unsupported_document_type`, 413 `document_too_large`, 422 `empty_document`, 409
     `too_many_documents`."""
-    await repo.get(user.uid, knowledge_base_id)  # 404 before storing anything
-    checked = documents.check_file(file.filename, await file.read(MAX_DOCUMENT_BYTES + 1))
-    document_id = repo.new_document_id(knowledge_base_id)
-    path = documents.file_path(user.uid, knowledge_base_id, document_id)
-    await documents.save_file(path, checked)
-    try:
-        document = await repo.add_document(
-            user.uid,
-            knowledge_base_id,
-            document_id,
-            name=checked.name,
-            mime=checked.mime,
-            size=len(checked.data),
-            storage_path=path,
-        )
-    except Exception:
-        await documents.delete_file(path)  # not recorded (e.g. the limit): don't keep the file
-        raise
-    ingestion.submit(Job(user.uid, knowledge_base_id, document_id))
+    data = await file.read(MAX_DOCUMENT_BYTES + 1)
+    document = await documents.store(repo, user.uid, knowledge_base_id, file.filename, data)
+    ingestion.submit(Job(user.uid, knowledge_base_id, document.document_id))
     return document
 
 

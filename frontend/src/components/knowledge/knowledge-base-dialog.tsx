@@ -55,7 +55,7 @@ function KnowledgeBaseForm({
   onDone,
 }: {
   state: Exclude<KnowledgeBaseDialogState, null>;
-  onDone: () => void;
+  onDone: (saved: KnowledgeBase) => void;
 }) {
   const models = useModels();
   const create = useCreateKnowledgeBase();
@@ -95,7 +95,7 @@ function KnowledgeBaseForm({
         ? await update.mutateAsync({ id: editing.knowledge_base_id, ...settings })
         : await create.mutateAsync(settings);
       toast.success(editing ? `Saved “${saved.name}”` : `Created “${saved.name}”`);
-      onDone();
+      onDone(saved);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Couldn't save the knowledge base.");
     }
@@ -204,9 +204,12 @@ function KnowledgeBaseForm({
 export function KnowledgeBaseDialog({
   state,
   onOpenChange,
+  onSaved,
 }: {
   state: KnowledgeBaseDialogState;
   onOpenChange: (open: boolean) => void;
+  /** After a successful save (e.g. to select a knowledge base just created). */
+  onSaved?: (saved: KnowledgeBase) => void;
 }) {
   return (
     <Dialog open={state !== null} onOpenChange={onOpenChange}>
@@ -222,7 +225,10 @@ export function KnowledgeBaseDialog({
           <KnowledgeBaseForm
             key={state.mode === "edit" ? state.knowledgeBase.knowledge_base_id : "new"}
             state={state}
-            onDone={() => onOpenChange(false)}
+            onDone={(saved) => {
+              onOpenChange(false);
+              onSaved?.(saved);
+            }}
           />
         )}
       </DialogContent>

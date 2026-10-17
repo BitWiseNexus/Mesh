@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Keep notes",
+  "description": "Stores the trigger's text in a knowledge base (choose it), then shows the result.",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "The office wifi password is mesh-2026." },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_k",
+      "type": "kb_upload",
+      "ref": "kb_add",
+      "data": { "label": "Save note", "knowledge_base_id": null, "title": "Office notes", "content": "{{input}}" },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "result",
+      "data": {},
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_k", "targetHandle": "in" },
+    { "id": "e2", "source": "node_k", "sourceHandle": "out", "target": "node_o", "targetHandle": "in" }
+  ]
+}

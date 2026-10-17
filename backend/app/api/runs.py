@@ -16,13 +16,14 @@ EventSource (which can't send headers).
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.flows import FlowId
 from app.api.flows import Repo as FlowRepo
+from app.api.knowledge import Ingestion
 from app.core.auth import CurrentUser
 from app.core.config import get_settings
 from app.core.errors import ApiError
@@ -31,7 +32,9 @@ from app.engine.compiler import ExecutionPlan, compile_flow
 from app.engine.executor import not_runnable_issues
 from app.engine.runner import Decision
 from app.engine.validation import FlowIssue
+from app.repositories.chunks import ChunkRepository
 from app.repositories.credentials import CredentialRepository
+from app.repositories.knowledge import KnowledgeBaseRepository
 from app.repositories.runs import RunRepository
 from app.schemas.flow import Flow
 from app.schemas.runs import (
@@ -42,6 +45,8 @@ from app.schemas.runs import (
     RunSummary,
 )
 from app.services.credentials import UserSecrets
+from app.services.ingestion import IngestionManager
+from app.services.knowledge import UserKnowledge
 from app.services.runs import RunManager
 
 router = APIRouter(tags=["runs"])
@@ -75,6 +80,16 @@ Manager = Annotated[RunManager, Depends(get_run_manager)]
 RunId = Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")]
 
 
+def _owner_services(owner_uid: str, ingestion: IngestionManager) -> dict[str, Any]:
+    """What a run needs of its owner's account: saved API keys and knowledge bases."""
+    db = get_db()
+    secrets = UserSecrets(CredentialRepository(db), owner_uid)
+    knowledge = UserKnowledge(
+        KnowledgeBaseRepository(db), ChunkRepository(db), owner_uid, secrets, ingestion
+    )
+    return {"secrets": secrets, "knowledge": knowledge}
+
+
 @router.post("/flows/{flow_id}/runs", status_code=status.HTTP_201_CREATED)
 async def start_run(
     flow_id: FlowId,
@@ -83,6 +98,7 @@ async def start_run(
     flows: FlowRepo,
     runs: Runs,
     manager: Manager,
+    ingestion: Ingestion,
 ) -> RunInfo:
     """Runs the flow as last saved (save first: the editor does). 422 `flow_invalid` /
     `invalid_trigger` / `nodes_not_runnable` with `issues`, 429 `too_many_runs`."""
@@ -106,7 +122,7 @@ async def start_run(
         plan=plan,
         input=body.input,
         repository=runs,
-        secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
+        **_owner_services(user.uid, ingestion),
         # Kept with the checkpoint if the run pauses: it resumes the flow as it was run.
         flow_snapshot=Flow.model_validate(stored.model_dump()).model_dump(mode="json"),
     )
@@ -121,6 +137,7 @@ async def answer_approval(
     user: CurrentUser,
     runs: Runs,
     manager: Manager,
+    ingestion: Ingestion,
 ) -> RunInfo:
     """Approves or rejects a waiting Approval Gate; the paused run continues (follow it with the
     stream). Send `content` to continue with an edited version (if the gate allows it). 409
@@ -150,7 +167,7 @@ async def answer_approval(
         plan=plan,
         input=None,  # the checkpoint has the run's input
         repository=runs,
-        secrets=UserSecrets(CredentialRepository(get_db()), user.uid),
+        **_owner_services(user.uid, ingestion),
         checkpoint=saved,
         decisions=[Decision(node_id, body.approved, body.content if edited else None, edited)],
         reserved=reserved,

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { expect, openDashboard, test } from "./helpers";
+import { expect, importFixture, openDashboard, test } from "./helpers";
 
 test("create, change and delete knowledge bases", async ({ page }) => {
   await openDashboard(page);
@@ -129,4 +129,118 @@ test("upload, list and delete a knowledge base's documents", async ({ page }) =>
   await page.getByRole("button", { name: "Delete knowledge base" }).click();
   await expect(page).toHaveURL(/\/knowledge$/);
   await expect(page.getByText("No knowledge bases yet")).toBeVisible();
+});
+
+test("a flow searches a knowledge base with the Retriever, as a step and as an agent's tool", async ({
+  editor,
+  page,
+}) => {
+  // A knowledge base with two documents.
+  await openDashboard(page);
+  await page.goto("/knowledge");
+  await page.getByRole("button", { name: "New knowledge base" }).first().click();
+  await page.getByRole("dialog").getByLabel("Name").fill("Help center");
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("link", { name: "Help center", exact: true }).click();
+  await page.locator("input[name=upload-documents]").setInputFiles([
+    file("passwords.md", "To reset your password, open the login page and choose Forgot password."),
+    file("billing.md", "Invoices are emailed on the first day of each month."),
+  ]);
+  const documents = page.getByRole("region", { name: "Documents" }).getByRole("listitem");
+  await expect(documents.filter({ hasText: "Ready" })).toHaveCount(2);
+
+  // A flow using it: the Retriever as a step, and attached to an agent as a tool.
+  await page.goto("/flows");
+  await page.getByRole("button", { name: "New flow" }).first().click();
+  await expect(editor.nodes).toHaveCount(2);
+  await importFixture(editor, path.join(__dirname, "fixtures", "retriever-flow.mesh.json"), 6);
+  await expect(editor.issuesButton("2 errors")).toBeVisible(); // no knowledge base chosen yet
+
+  const field = editor.settings.getByRole("combobox", { name: /^Knowledge base/ });
+  await editor.node("Docs search").click();
+  // "New knowledge base…" creates one and selects it.
+  await field.click();
+  await page.getByRole("option", { name: "New knowledge base…" }).click();
+  await page.getByRole("dialog", { name: "New knowledge base" }).getByLabel("Name").fill("Empty one");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(field).toContainText("Empty one");
+  await expect(editor.settings.getByText(/0 documents — add some/)).toBeVisible();
+  // …but the step should search the help center.
+  await field.click();
+  await page.getByRole("option", { name: "Help center" }).click();
+  await expect(editor.settings.getByText(/2 documents · Open/)).toBeVisible();
+  await expect(field).not.toHaveAttribute("aria-invalid"); // chosen: no longer flagged
+  await editor.node("Docs tool").click();
+  await field.click();
+  await page.getByRole("option", { name: "Help center" }).click();
+  await editor.readyToRun();
+
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  const runPanel = page.getByRole("region", { name: "Run" });
+  await expect(runPanel.getByRole("status", { name: "Run status" })).toHaveText("Succeeded", {
+    timeout: 15_000,
+  });
+  // The step found the passwords document (top 1)…
+  const answer = runPanel.getByRole("listitem", { name: "Answer output", exact: true });
+  await expect(answer).toContainText("Forgot password");
+  await expect(answer).toContainText("passwords.md");
+  await expect(answer).not.toContainText("Invoices");
+  // …and the agent called it as a tool with its own query (mock/tools: the user message).
+  const helper = runPanel.getByRole("listitem", { name: "Helper output" });
+  await expect(helper.getByRole("list", { name: "Tool calls" })).toContainText("docs_tool");
+  await expect(runPanel.getByRole("listitem", { name: "Helper answer output" })).toContainText(
+    "Forgot password",
+  );
+
+  // A knowledge base that gets deleted is flagged where flows use it.
+  const flowUrl = page.url();
+  await page.goto("/knowledge");
+  await page.getByRole("button", { name: "Actions for Help center" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Delete knowledge base" }).click();
+  await expect(page.getByRole("article", { name: "Help center" })).toHaveCount(0);
+  await page.goto(flowUrl);
+  await editor.node("Docs search").click();
+  await expect(field).toContainText("Deleted knowledge base");
+  await expect(editor.settings.getByText("This knowledge base was deleted.")).toBeVisible();
+});
+
+test("a flow adds text to a knowledge base, which then lists it as a searchable document", async ({
+  editor,
+  page,
+}) => {
+  await openDashboard(page);
+  await page.goto("/knowledge");
+  await page.getByRole("button", { name: "New knowledge base" }).first().click();
+  await page.getByRole("dialog").getByLabel("Name").fill("Notes");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByRole("article", { name: "Notes" })).toBeVisible();
+
+  await page.goto("/flows");
+  await page.getByRole("button", { name: "New flow" }).first().click();
+  await expect(editor.nodes).toHaveCount(2);
+  await importFixture(editor, path.join(__dirname, "fixtures", "add-to-kb-flow.mesh.json"), 3);
+  await editor.node("Save note").click();
+  await editor.settings.getByRole("combobox", { name: /^Knowledge base/ }).click();
+  await page.getByRole("option", { name: "Notes" }).click();
+  await editor.readyToRun();
+
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  const runPanel = page.getByRole("region", { name: "Run" });
+  await expect(runPanel.getByRole("status", { name: "Run status" })).toHaveText("Succeeded", {
+    timeout: 15_000,
+  });
+  await expect(runPanel.getByRole("listitem", { name: "Output output" })).toContainText(
+    '"name": "Office notes.md"',
+  );
+  await runPanel.getByRole("tab", { name: "Logs" }).click();
+  await expect(runPanel.getByRole("list", { name: "Run log" })).toContainText(
+    "“Office notes.md” is searchable (1 chunk)",
+  );
+
+  await page.goto("/knowledge");
+  await page.getByRole("link", { name: "Notes", exact: true }).click();
+  await expect(page.getByRole("listitem", { name: "Office notes.md" })).toContainText(
+    "Ready · 1 chunk",
+  );
 });

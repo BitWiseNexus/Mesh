@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Ask the docs",
+  "description": "Retriever as a step and as an agent's tool (choose the knowledge base in both).",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "how do I reset my password" },
+      "position": { "x": 0, "y": 150 }
+    },
+    {
+      "id": "node_r",
+      "type": "kb_retriever",
+      "ref": "docs_search",
+      "data": { "label": "Docs search", "knowledge_base_id": null, "query": "{{input}}", "top_k": 1 },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "answer",
+      "data": { "label": "Answer" },
+      "position": { "x": 800, "y": 0 }
+    },
+    {
+      "id": "node_a",
+      "type": "agent_node",
+      "ref": "helper",
+      "data": { "label": "Helper", "model": "mock/tools", "prompt": "{{input}}" },
+      "position": { "x": 400, "y": 300 }
+    },
+    {
+      "id": "node_rt",
+      "type": "kb_retriever",
+      "ref": "docs_tool",
+      "data": { "label": "Docs tool", "knowledge_base_id": null, "top_k": 1 },
+      "position": { "x": 400, "y": 500 }
+    },
+    {
+      "id": "node_o2",
+      "type": "output_display",
+      "ref": "helper_answer",
+      "data": { "label": "Helper answer" },
+      "position": { "x": 800, "y": 300 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_r", "targetHandle": "in" },
+    { "id": "e2", "source": "node_r", "sourceHandle": "out", "target": "node_o", "targetHandle": "in" },
+    { "id": "e3", "source": "node_t", "sourceHandle": "out", "target": "node_a", "targetHandle": "in" },
+    { "id": "e4", "source": "node_a", "sourceHandle": "out", "target": "node_o2", "targetHandle": "in" },
+    {
+      "id": "e5",
+      "source": "node_a",
+      "sourceHandle": "tools",
+      "target": "node_rt",
+      "targetHandle": "tool",
+      "type": "tool_connection"
+    }
+  ]
+}

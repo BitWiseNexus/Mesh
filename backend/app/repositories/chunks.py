@@ -1,8 +1,8 @@
 """Firestore persistence for knowledge-base chunks: the searchable pieces of documents.
 
 Document `kb_chunks/{chunk_id}`:
-    owner_uid, kb_id, doc_id, index, text, page (PDFs, else null), embedding (Vector, 768 dims),
-    created_at
+    owner_uid, kb_id, doc_id, doc_name, index, text, page (PDFs, else null),
+    embedding (Vector, 768 dims), created_at
 
 A top-level collection (not under the knowledge base) so one vector index serves every knowledge
 base: searches pre-filter on `kb_id` (firebase/firestore.indexes.json); `text` is exempt from
@@ -15,6 +15,7 @@ from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 from google.cloud.firestore_v1.vector import Vector
 
 from app.services.chunking import Chunk
@@ -56,6 +57,7 @@ class ChunkRepository:
         owner_uid: str,
         knowledge_base_id: str,
         document_id: str,
+        document_name: str,
         chunks: Sequence[Chunk],
         vectors: Sequence[list[float]],
     ) -> None:
@@ -73,6 +75,7 @@ class ChunkRepository:
                         "owner_uid": owner_uid,
                         "kb_id": knowledge_base_id,
                         "doc_id": document_id,
+                        "doc_name": document_name,
                         "index": chunk.index,
                         "text": chunk.text,
                         "page": chunk.page,
@@ -81,3 +84,28 @@ class ChunkRepository:
                     },
                 )
             await batch.commit()
+
+    async def search(
+        self, knowledge_base_id: str, vector: list[float], limit: int
+    ) -> list[dict[str, Any]]:
+        """The `limit` chunks of the knowledge base nearest to `vector` (cosine), nearest first:
+        [{text, source, page, score}] with score = cosine similarity (1 = same direction)."""
+        query = self._collection.where(
+            filter=FieldFilter("kb_id", "==", knowledge_base_id)
+        ).find_nearest(
+            vector_field="embedding",
+            query_vector=Vector(vector),
+            distance_measure=DistanceMeasure.COSINE,
+            limit=limit,
+            distance_result_field="distance",
+        )
+        found = [s.to_dict() async for s in query.stream()]
+        return [
+            {
+                "text": chunk["text"],
+                "source": chunk.get("doc_name", ""),
+                "page": chunk.get("page"),
+                "score": round(1 - float(chunk["distance"]), 4),
+            }
+            for chunk in found
+        ]

@@ -182,7 +182,13 @@ test("drop a connection on empty canvas to add a connected node", async ({ edito
 
   // From an agent's Tools handle only tools (and agents) fit; the edge is a tool attachment.
   await dragConnectionTo(editor, editor.handle("Echo Agent", "tools", "source"), agentBox.x + 120, agentBox.y + 250);
-  await expect(options(editor)).toHaveText([/^Agent/, /^Web Search/, /^Web Scraper/, /^API Caller/]);
+  await expect(options(editor)).toHaveText([
+    /^Agent/,
+    /^Web Search/,
+    /^Web Scraper/,
+    /^API Caller/,
+    /^Retriever/,
+  ]);
   await options(editor).filter({ hasText: "Web Search" }).click();
   await expect(editor.nodes).toHaveCount(4);
   draft = await editor.draft();

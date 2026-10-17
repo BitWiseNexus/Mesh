@@ -17,6 +17,7 @@ import type { FieldDef } from "@/lib/nodes/registry";
 import { cn } from "@/lib/utils";
 
 import { CredentialField } from "./credential-field";
+import { KnowledgeBaseField } from "./knowledge-base-field";
 import { ModelField } from "./model-field";
 import { ReferencePicker } from "./reference-picker";
 
@@ -180,14 +181,14 @@ export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldPr
       );
       break;
     case "knowledge_base":
-      // Knowledge bases (Phase 7) are managed on their own page; until then there's nothing to
-      // pick, and nodes with this field are "Soon".
       control = (
-        <Select disabled value={null}>
-          <SelectTrigger id={id} {...a11y} className="w-full">
-            <SelectValue placeholder="Knowledge bases are coming soon" />
-          </SelectTrigger>
-        </Select>
+        <KnowledgeBaseField
+          id={id}
+          value={value}
+          onChange={onChange}
+          invalid={invalid}
+          required={field.required}
+        />
       );
       break;
     case "credential":
