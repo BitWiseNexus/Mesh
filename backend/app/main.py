@@ -51,7 +51,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title=f"{settings.app_name} API", version="0.1.0", lifespan=lifespan)
 
     # Inside CORS (middleware added later wraps earlier), so its error responses get CORS headers.
-    app.add_middleware(ErrorGuardMiddleware, timeout=settings.request_timeout_seconds)
+    app.add_middleware(
+        ErrorGuardMiddleware,
+        timeout=settings.request_timeout_seconds,
+        # Waiting for the flow's answer, plus the usual time for everything else.
+        webhook_timeout=(
+            settings.webhook_response_timeout_seconds + settings.request_timeout_seconds
+        ),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

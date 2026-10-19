@@ -1,4 +1,5 @@
-"""Webhook triggers: what the trigger outputs for a request, and per-webhook rate limiting.
+"""Webhook triggers: what the trigger outputs for a request, the HTTP Response node's answer, and
+per-webhook rate limiting.
 
 The Webhook trigger outputs the request as `{method, query, headers, body}`:
 - `query` (and form-encoded bodies): one value → text, a repeated name → a list of texts
@@ -9,6 +10,7 @@ The Webhook trigger outputs the request as `{method, query, headers, body}`:
 """
 
 import json
+import re
 import time
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -118,3 +120,72 @@ class RateLimiter:
         if len(self._hits) > self.MAX_KEYS:
             self._hits = {k: v for k, v in self._hits.items() if v and v[-1] > now - self.window}
         return None
+
+
+# ── HTTP Response node ────────────────────────────────────────────────────
+
+_HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+#: Set by the server from the body; a flow can't override them.
+_RESERVED_HEADERS = frozenset({"content-length", "transfer-encoding", "connection"})
+_TEXT_TYPES = {"text/plain": "text/plain; charset=utf-8", "text/html": "text/html; charset=utf-8"}
+NO_BODY_STATUSES = frozenset({204, 304})
+
+
+class ResponseError(ValueError):
+    """A user-facing problem with what the HTTP Response node was asked to send."""
+
+
+def _body_text(body: Any, content_type: str) -> tuple[str, str]:
+    """(text, Content-Type) for the body value an HTTP Response node rendered."""
+    if content_type == "auto":
+        if isinstance(body, dict | list | bool | int | float):
+            content_type = "application/json"
+        else:
+            return ("" if body is None else str(body)), _TEXT_TYPES["text/plain"]
+    if content_type == "application/json":
+        if isinstance(body, str):
+            try:
+                json.loads(body)
+            except json.JSONDecodeError as exc:
+                raise ResponseError(
+                    f"The body isn't valid JSON ({exc.msg}, line {exc.lineno} column "
+                    f"{exc.colno}) — use Text, or make it JSON."
+                ) from None
+            return body, "application/json"
+        return json.dumps(body, ensure_ascii=False), "application/json"
+    if content_type not in _TEXT_TYPES:
+        raise ResponseError(f"Unsupported content type “{content_type}”.")
+    if isinstance(body, str):
+        return body, _TEXT_TYPES[content_type]
+    text = "" if body is None else json.dumps(body, ensure_ascii=False, indent=2)
+    return text, _TEXT_TYPES[content_type]
+
+
+def build_response(status_code: Any, content_type: str, headers: Any, body: Any) -> dict:
+    """What the HTTP Response node outputs, and the webhook caller gets:
+    `{status_code, headers, body}` with `body` the exact text sent."""
+    if not isinstance(status_code, int) or isinstance(status_code, bool):
+        raise ResponseError("The status code must be a whole number.")
+    if not 200 <= status_code <= 599:
+        raise ResponseError("The status code must be between 200 and 599.")
+    if not isinstance(headers, dict):
+        raise ResponseError("Extra headers must be a JSON object.")
+    sent: dict[str, str] = {}
+    if status_code in NO_BODY_STATUSES:
+        text = ""
+    else:
+        text, sent["Content-Type"] = _body_text(body, content_type)
+    for name, value in headers.items():
+        if not _HEADER_NAME.match(name):
+            raise ResponseError(f"“{name}” isn't a valid header name.")
+        if name.lower() in _RESERVED_HEADERS:
+            raise ResponseError(f"The server sets {name} itself.")
+        if isinstance(value, dict | list) or value is None:
+            raise ResponseError(f"The {name} header needs a text value.")
+        value = str(value).lower() if isinstance(value, bool) else str(value)
+        if any(c in value for c in "\r\n"):
+            raise ResponseError(f"The {name} header can't contain line breaks.")
+        if name.lower() == "content-type":
+            sent.pop("Content-Type", None)  # an explicit Content-Type wins
+        sent[name] = value
+    return {"status_code": status_code, "headers": sent, "body": text}

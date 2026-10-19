@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/api";
+import type { CanvasEdge, CanvasNode } from "@/lib/flow/graph";
 
 /** The header a Webhook trigger's secret is sent in (backend `app/services/webhooks.py`). */
 export const SECRET_HEADER = "X-Mesh-Secret";
@@ -41,4 +42,26 @@ export function curlCommand({
     parts.push("-H", shellQuote(`Content-Type: ${type}`), "--data-raw", shellQuote(text));
   }
   return parts.join(" ");
+}
+
+/** Whether an HTTP Response node follows `triggerId` (along data edges): then a request to the
+ * trigger waits for that node's answer (backend `app/api/webhooks.py`). */
+export function answersFrom(
+  triggerId: string,
+  nodes: Pick<CanvasNode, "id" | "type">[],
+  edges: Pick<CanvasEdge, "source" | "target" | "type">[],
+): boolean {
+  const types = new Map(nodes.map((n) => [n.id, n.type]));
+  const seen = new Set([triggerId]);
+  const queue = [triggerId];
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const e of edges) {
+      if ((e.type ?? "data") !== "data" || e.source !== current || seen.has(e.target)) continue;
+      if (types.get(e.target) === "action_http_response") return true;
+      seen.add(e.target);
+      queue.push(e.target);
+    }
+  }
+  return false;
 }

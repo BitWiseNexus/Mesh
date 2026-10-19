@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { curlCommand, SECRET_HEADER, webhookUrl } from "@/lib/webhooks";
+import { answersFrom, curlCommand, SECRET_HEADER, webhookUrl } from "@/lib/webhooks";
 import { useFlowStore } from "@/stores/flow-store";
 import type { NodeData } from "@/types/flow";
 
@@ -20,6 +20,7 @@ async function copy(text: string, what: string) {
 /** A Webhook trigger's URL, with copy buttons (settings panel). */
 export function WebhookUrl({ nodeId, data }: { nodeId: string; data: NodeData }) {
   const flowId = useFlowStore((s) => s.flowId);
+  const answers = useFlowStore((s) => answersFrom(nodeId, s.nodes, s.edges));
   if (!flowId) {
     return (
       <p className="text-xs text-muted-foreground">Save the flow to get this trigger&apos;s URL.</p>
@@ -52,8 +53,10 @@ export function WebhookUrl({ nodeId, data }: { nodeId: string; data: NodeData })
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        A {method} request here runs the flow as last saved and answers right away with the
-        run&apos;s id — the run shows up in Run history.{" "}
+        {answers
+          ? `A ${method} request here runs the flow as last saved, and the caller gets what its HTTP Response node sends (if that takes too long: 202 with the run's id).`
+          : `A ${method} request here runs the flow as last saved and answers right away with the run's id — add an HTTP Response node to send something else.`}{" "}
+        The run shows up in Run history.{" "}
         {secret
           ? `Send the secret in the ${SECRET_HEADER} header.`
           : "Anyone with the URL can call it: add a secret to require one."}

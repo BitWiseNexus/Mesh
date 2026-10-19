@@ -78,6 +78,8 @@ export default defineConfig({
             FIREBASE_AUTH_EMULATOR_HOST: `127.0.0.1:${EMULATORS.auth}`,
             FIREBASE_STORAGE_EMULATOR_HOST: `127.0.0.1:${EMULATORS.storage}`,
             CORS_ORIGINS: JSON.stringify([`http://localhost:${PORT}`]),
+            // Never send real email from tests, whatever backend/.env holds.
+            RESEND_API_KEY: "",
           }
         : undefined,
     },

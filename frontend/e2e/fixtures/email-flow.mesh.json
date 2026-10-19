@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Daily digest",
+  "description": "Emails the team (in Test mode: nothing is sent).",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "Monday" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_e",
+      "type": "action_email",
+      "ref": "mail",
+      "data": {
+        "label": "Mail the team",
+        "to": "team@example.com, Ada <ada@example.com>",
+        "subject": "Digest for {{input}}",
+        "body": "Here is {{input}}'s digest.",
+        "format": "text",
+        "from_address": "",
+        "credential_id": "",
+        "test_mode": true
+      },
+      "position": { "x": 400, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_e", "targetHandle": "in" }
+  ]
+}

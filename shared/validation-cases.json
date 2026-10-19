@@ -136,12 +136,12 @@
       "name": "nodes that aren't available yet",
       "nodes": [
         { "id": "t", "type": "trigger_manual" },
-        { "id": "mail", "type": "action_email", "data": { "to": "a@b.co", "subject": "Hi" } }
+        { "id": "db", "type": "action_db_write", "data": { "collection": "notes" } }
       ],
-      "edges": [{ "from": "t", "to": "mail" }],
-      "errors": ["unavailable:mail"],
+      "edges": [{ "from": "t", "to": "db" }],
+      "errors": ["unavailable:db"],
       "warnings": [],
-      "messages": { "unavailable:mail": "“Send Email”: Send Email nodes aren't available yet" }
+      "messages": { "unavailable:db": "“Database Write”: Database Write nodes aren't available yet" }
     },
     {
       "name": "invalid values: number range, type, text",
@@ -272,6 +272,22 @@
       "edges": [{ "from": "t", "to": "a" }, { "from": "a", "to": "api", "type": "tool_connection" }],
       "errors": [],
       "warnings": []
+    },
+    {
+      "name": "an HTTP Response only answers webhook callers",
+      "nodes": [
+        { "id": "hook", "type": "trigger_webhook" },
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "answer", "type": "action_http_response", "data": { "body": "{{hook.output.body}}" } },
+        { "id": "lost", "type": "action_http_response" },
+        { "id": "stray", "type": "action_http_response" }
+      ],
+      "edges": [{ "from": "hook", "to": "answer" }, { "from": "t", "to": "answer" }, { "from": "t", "to": "lost" }],
+      "errors": [],
+      "warnings": ["no-webhook:lost", "unreachable:stray"],
+      "messages": {
+        "no-webhook:lost": "“HTTP Response” answers the caller of a Webhook trigger, but no Webhook trigger leads to it"
+      }
     },
     {
       "name": "a schedule needs a valid cron expression",

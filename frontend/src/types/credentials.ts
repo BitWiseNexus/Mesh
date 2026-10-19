@@ -3,7 +3,14 @@
  * the backend's `CredentialProvider` (enforced by backend/tests/test_frontend_sync.py).
  */
 
-export const CREDENTIAL_PROVIDERS = ["openai", "anthropic", "gemini", "tavily", "http"] as const;
+export const CREDENTIAL_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "tavily",
+  "resend",
+  "http",
+] as const;
 export type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
 
 export const PROVIDER_INFO: Record<
@@ -14,6 +21,7 @@ export const PROVIDER_INFO: Record<
   anthropic: { label: "Anthropic", placeholder: "sk-ant-…", usedBy: "Agents on Claude models" },
   gemini: { label: "Google Gemini", placeholder: "AIza…", usedBy: "Agents on Gemini models" },
   tavily: { label: "Tavily", placeholder: "tvly-…", usedBy: "Web Search (Tavily)" },
+  resend: { label: "Resend", placeholder: "re_…", usedBy: "Send Email" },
   http: { label: "HTTP API", placeholder: "Token or API key", usedBy: "API Caller nodes you pick it in" },
 };
 

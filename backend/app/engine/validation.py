@@ -231,6 +231,20 @@ def validate_flow(flow: Flow) -> list[FlowIssue]:
                     **at,
                 )
 
+        if (
+            node.type is NodeType.ACTION_HTTP_RESPONSE
+            and node.id in reachable
+            and not any(
+                by_id[i].type is NodeType.TRIGGER_WEBHOOK for i in upstream_node_ids(node.id, edges)
+            )
+        ):
+            warning(
+                f"no-webhook:{node.id}",
+                f"{name(node)} answers the caller of a Webhook trigger, but no Webhook trigger "
+                "leads to it",
+                **at,
+            )
+
         for field in spec.fields:
             value = node.data.get(field.key)
             at_field = {**at, "field": field.key}

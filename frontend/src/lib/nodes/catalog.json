@@ -1050,7 +1050,7 @@
       "label": "Send Email",
       "description": "Send an email (Resend).",
       "refPrefix": "email",
-      "outputHint": "The sent message: {id}",
+      "outputHint": "The email: {id, sent, from, to, subject, body}",
       "inputs": [
         {
           "id": "in",
@@ -1066,14 +1066,19 @@
       "defaultData": {
         "to": "",
         "subject": "",
-        "body": "{{input}}"
+        "body": "{{input}}",
+        "format": "text",
+        "from_address": "",
+        "credential_id": "",
+        "test_mode": false
       },
       "fields": [
         {
           "key": "to",
           "label": "To",
           "kind": "text",
-          "placeholder": "someone@example.com",
+          "help": "Up to 50 addresses, separated by commas.",
+          "placeholder": "ada@example.com, bob@example.com",
           "required": true,
           "templated": true
         },
@@ -1092,9 +1097,53 @@
           "required": false,
           "templated": true,
           "rows": 5
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "text",
+              "label": "Plain text"
+            },
+            {
+              "value": "html",
+              "label": "HTML"
+            }
+          ]
+        },
+        {
+          "key": "from_address",
+          "label": "From",
+          "kind": "text",
+          "help": "On a domain verified in Resend. Empty: the server's sender (Resend's test sender only delivers to your own Resend account's address).",
+          "placeholder": "Mesh <onboarding@resend.dev>",
+          "required": false,
+          "templated": false
+        },
+        {
+          "key": "credential_id",
+          "label": "Resend key",
+          "kind": "credential",
+          "help": "Automatic uses your newest saved Resend key, or the server's.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "resend"
+          ]
+        },
+        {
+          "key": "test_mode",
+          "label": "Test mode: show the email instead of sending it",
+          "kind": "switch",
+          "required": false,
+          "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "action_slack",
@@ -1187,9 +1236,9 @@
       "type": "action_http_response",
       "category": "action",
       "label": "HTTP Response",
-      "description": "Reply to the webhook caller.",
+      "description": "Answer the request that started the flow (Webhook trigger).",
       "refPrefix": "response",
-      "outputHint": "The response that was sent",
+      "outputHint": "The response: {status_code, headers, body}",
       "inputs": [
         {
           "id": "in",
@@ -1204,7 +1253,9 @@
       ],
       "defaultData": {
         "status_code": 200,
-        "body": "{{input}}"
+        "body": "{{input}}",
+        "content_type": "auto",
+        "headers": {}
       },
       "fields": [
         {
@@ -1213,7 +1264,7 @@
           "kind": "number",
           "required": false,
           "templated": false,
-          "min": 100,
+          "min": 200,
           "max": 599,
           "step": 1
         },
@@ -1221,13 +1272,48 @@
           "key": "body",
           "label": "Body",
           "kind": "textarea",
-          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "help": "A single reference to an object or list (like {{input}}) is sent as JSON.",
           "required": false,
           "templated": true,
           "rows": 4
+        },
+        {
+          "key": "content_type",
+          "label": "Content type",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "auto",
+              "label": "Automatic (JSON for objects, else text)"
+            },
+            {
+              "value": "application/json",
+              "label": "JSON"
+            },
+            {
+              "value": "text/plain",
+              "label": "Text"
+            },
+            {
+              "value": "text/html",
+              "label": "HTML"
+            }
+          ]
+        },
+        {
+          "key": "headers",
+          "label": "Extra headers",
+          "kind": "json",
+          "help": "Optional, e.g. {\"Cache-Control\": \"no-store\"}.",
+          "required": false,
+          "templated": false,
+          "rows": 3,
+          "shape": "object"
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "action_db_write",

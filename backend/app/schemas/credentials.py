@@ -14,6 +14,7 @@ class CredentialProvider(StrEnum):
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
     TAVILY = "tavily"
+    RESEND = "resend"
     #: Any HTTP API (used by the API Caller).
     HTTP = "http"
 

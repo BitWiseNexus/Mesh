@@ -95,13 +95,24 @@ as a tool an agent calls — and **Add to Knowledge Base** stores text from a ru
 
 A **Webhook** trigger gives its flow a URL, shown in the trigger's settings (with a ready-made curl
 command to copy). A request to it with the configured method runs the flow as last saved and
-answers `202 {"run_id": …}` right away; the run appears in **Run history**. The trigger outputs
+answers `202 {"run_id": …}` right away; the run appears in **Run history**. Add an **HTTP
+Response** node to answer with something else: the caller then waits for it and gets its status
+code, body (objects as JSON) and headers — or, if the flow takes longer than a minute
+(`WEBHOOK_RESPONSE_TIMEOUT_SECONDS`), `202` with the run id. The trigger outputs
 the request as `{method, query, headers, body}` (JSON and form bodies are parsed), so later nodes
 can use e.g. `{{webhook.output.body.email}}`. Set a secret to require an `X-Mesh-Secret` header.
 Bodies are limited to 1 MB and each webhook to 60 requests a minute (`WEBHOOK_MAX_BODY_BYTES`,
 `WEBHOOK_REQUESTS_PER_MINUTE`). Pressing **Run** in the editor uses the trigger's Test body
 instead of a request. In production the backend (`NEXT_PUBLIC_API_URL`) must be reachable by
 whoever calls the URL.
+
+### Email
+
+**Send Email** sends through [Resend](https://resend.com): add a Resend key under **API keys** (or
+`RESEND_API_KEY` in `backend/.env`) and send from an address on a domain you verified there
+(`EMAIL_FROM` sets the default; Resend's test sender `onboarding@resend.dev` only delivers to your
+own Resend account's address). Its **Test mode** shows the email in the run panel instead of
+sending it.
 
 ### Schedules
 

@@ -30,6 +30,8 @@ def test_registered_executors() -> None:
         NodeType.AGENT_NODE,
         NodeType.KB_RETRIEVER,
         NodeType.KB_UPLOAD,
+        NodeType.ACTION_HTTP_RESPONSE,
+        NodeType.ACTION_EMAIL,
         NodeType.OUTPUT_DISPLAY,
     }
 

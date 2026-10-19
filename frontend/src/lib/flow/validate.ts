@@ -206,6 +206,19 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
       }
     }
 
+    if (
+      node.type === "action_http_response" &&
+      reachable.has(node.id) &&
+      !upstreamNodeIds(node.id, edges).some((id) => byId.get(id)?.type === "trigger_webhook")
+    ) {
+      issues.push({
+        id: `no-webhook:${node.id}`,
+        severity: "warning",
+        nodeId: node.id,
+        message: `${name(node)} answers the caller of a Webhook trigger, but no Webhook trigger leads to it`,
+      });
+    }
+
     for (const field of def.fields) {
       const value = node.data[field.key];
       if (isMissingRequired(field, node.data)) {

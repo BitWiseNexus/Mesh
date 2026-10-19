@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     webhook_max_body_bytes: int = Field(default=1_000_000, ge=1)
     #: Requests each webhook accepts per minute; more get 429 `rate_limited`.
     webhook_requests_per_minute: int = Field(default=60, ge=1)
+    #: How long a caller waits for the flow's HTTP Response node before getting 202 + the run id.
+    webhook_response_timeout_seconds: float = Field(default=60, gt=0)
 
     # Schedule triggers: checked once a minute by an in-process scheduler (one backend instance
     # is enough; several are safe — each due time is claimed once). Off → schedules never fire.
@@ -53,6 +55,11 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     # Web search (the Web Search tool falls back to DuckDuckGo without one).
     tavily_api_key: SecretStr | None = None
+    # Email (Send Email node, via Resend). Users can save their own key; the sender address must
+    # be on a domain verified in that Resend account. Resend's test sender only delivers to the
+    # account owner's own address.
+    resend_api_key: SecretStr | None = None
+    email_from: str = "Mesh <onboarding@resend.dev>"
     llm_timeout_seconds: int = Field(default=120, ge=1)
     #: One tool call of an agent (an agent used as a tool counts as one call).
     tool_timeout_seconds: int = Field(default=120, ge=1)

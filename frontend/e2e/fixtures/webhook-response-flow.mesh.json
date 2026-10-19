@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Greeting API",
+  "description": "Answers each request with a greeting (HTTP Response node).",
+  "nodes": [
+    {
+      "id": "node_w",
+      "type": "trigger_webhook",
+      "ref": "ask",
+      "data": { "label": "Ask", "method": "POST", "secret": "", "test_body": "{\"name\": \"Test\"}" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_a",
+      "type": "agent_node",
+      "ref": "greeter",
+      "data": { "label": "Greeter", "model": "mock/echo", "prompt": "Hello {{ask.output.body.name}}" },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_r",
+      "type": "action_http_response",
+      "ref": "reply",
+      "data": {
+        "label": "Reply",
+        "status_code": 201,
+        "body": "{{input}}",
+        "content_type": "auto",
+        "headers": { "X-Flow": "mesh" }
+      },
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_w", "sourceHandle": "out", "target": "node_a", "targetHandle": "in" },
+    { "id": "e2", "source": "node_a", "sourceHandle": "out", "target": "node_r", "targetHandle": "in" }
+  ]
+}

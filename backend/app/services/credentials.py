@@ -10,6 +10,7 @@ _LABELS = {
     CredentialProvider.ANTHROPIC: "Anthropic",
     CredentialProvider.GEMINI: "Google Gemini",
     CredentialProvider.TAVILY: "Tavily",
+    CredentialProvider.RESEND: "Resend",
     CredentialProvider.HTTP: "HTTP API",
 }
 

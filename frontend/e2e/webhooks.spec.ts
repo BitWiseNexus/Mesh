@@ -76,3 +76,34 @@ test("running a webhook flow from the editor uses the Test body", async ({ edito
     "Started without a request: the Test body stands in for the request body",
   );
 });
+
+test("a webhook caller gets the flow's HTTP Response", async ({ editor, page }) => {
+  await editor.open();
+  await importFixture(editor, path.join(__dirname, "fixtures", "webhook-response-flow.mesh.json"), 3);
+  await editor.readyToRun();
+  await editor.save();
+
+  await editor.node("Ask").click();
+  await expect(editor.settings).toContainText(
+    "the caller gets what its HTTP Response node sends",
+  );
+  const url = await editor.settings.getByRole("textbox", { name: "Webhook URL" }).inputValue();
+  const answer = await page.request.post(url, { data: { name: "Ada" } });
+  expect(answer.status()).toBe(201);
+  expect(await answer.text()).toBe("Hello Ada");
+  expect(answer.headers()["x-flow"]).toBe("mesh");
+
+  // From the editor, the node shows what it would send.
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  const runPanel = page.getByRole("region", { name: "Run" });
+  await expect(runPanel.getByRole("status", { name: "Run status" })).toHaveText("Succeeded", {
+    timeout: 15_000,
+  });
+  const reply = runPanel.getByRole("listitem", { name: "Reply output" });
+  await expect(reply).toContainText('"status_code": 201');
+  await expect(reply).toContainText('"body": "Hello Test"');
+  await runPanel.getByRole("tab", { name: "Logs" }).click();
+  await expect(runPanel.getByRole("list", { name: "Run log" })).toContainText(
+    "Response ready: 201 (text/plain; charset=utf-8)",
+  );
+});
