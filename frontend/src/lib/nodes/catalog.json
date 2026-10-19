@@ -1151,7 +1151,7 @@
       "label": "Slack Message",
       "description": "Post a message to a Slack channel.",
       "refPrefix": "slack",
-      "outputHint": "The posted message: {ts, channel}",
+      "outputHint": "The message: {sent, channel, ts, text}",
       "inputs": [
         {
           "id": "in",
@@ -1166,13 +1166,16 @@
       ],
       "defaultData": {
         "channel": "",
-        "text": "{{input}}"
+        "text": "{{input}}",
+        "credential_id": "",
+        "test_mode": false
       },
       "fields": [
         {
           "key": "channel",
           "label": "Channel",
           "kind": "text",
+          "help": "A channel name or ID. Invite the bot to it first.",
           "placeholder": "#general",
           "required": true,
           "templated": true
@@ -1181,21 +1184,39 @@
           "key": "text",
           "label": "Message",
           "kind": "textarea",
-          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "help": "Slack formatting works: *bold*, _italic_, <https://example.com|links>.",
           "required": false,
           "templated": true,
           "rows": 4
+        },
+        {
+          "key": "credential_id",
+          "label": "Slack bot token",
+          "kind": "credential",
+          "help": "Automatic uses your newest saved Slack token, or the server's.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "slack"
+          ]
+        },
+        {
+          "key": "test_mode",
+          "label": "Test mode: show the message instead of posting it",
+          "kind": "switch",
+          "required": false,
+          "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "action_telegram",
       "category": "action",
       "label": "Telegram Message",
-      "description": "Send a Telegram message.",
+      "description": "Send a Telegram message from your bot.",
       "refPrefix": "telegram",
-      "outputHint": "The sent message: {message_id}",
+      "outputHint": "The message: {sent, chat_id, message_id, message_ids, text}",
       "inputs": [
         {
           "id": "in",
@@ -1210,15 +1231,20 @@
       ],
       "defaultData": {
         "chat_id": "",
-        "text": "{{input}}"
+        "text": "{{input}}",
+        "format": "text",
+        "credential_id": "",
+        "test_mode": false
       },
       "fields": [
         {
           "key": "chat_id",
           "label": "Chat ID",
           "kind": "text",
+          "help": "Someone who started the bot, a group it's in, or a channel it administers.",
+          "placeholder": "123456789 or @channel",
           "required": true,
-          "templated": false
+          "templated": true
         },
         {
           "key": "text",
@@ -1228,9 +1254,44 @@
           "required": false,
           "templated": true,
           "rows": 4
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "kind": "select",
+          "required": false,
+          "templated": false,
+          "options": [
+            {
+              "value": "text",
+              "label": "Plain text (long messages are split)"
+            },
+            {
+              "value": "html",
+              "label": "HTML (<b>, <i>, <a href>…)"
+            }
+          ]
+        },
+        {
+          "key": "credential_id",
+          "label": "Telegram bot token",
+          "kind": "credential",
+          "help": "Automatic uses your newest saved Telegram token, or the server's.",
+          "required": false,
+          "templated": false,
+          "providers": [
+            "telegram"
+          ]
+        },
+        {
+          "key": "test_mode",
+          "label": "Test mode: show the message instead of sending it",
+          "kind": "switch",
+          "required": false,
+          "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "action_http_response",

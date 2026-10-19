@@ -15,6 +15,8 @@ class CredentialProvider(StrEnum):
     GEMINI = "gemini"
     TAVILY = "tavily"
     RESEND = "resend"
+    SLACK = "slack"
+    TELEGRAM = "telegram"
     #: Any HTTP API (used by the API Caller).
     HTTP = "http"
 

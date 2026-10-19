@@ -106,13 +106,16 @@ Bodies are limited to 1 MB and each webhook to 60 requests a minute (`WEBHOOK_MA
 instead of a request. In production the backend (`NEXT_PUBLIC_API_URL`) must be reachable by
 whoever calls the URL.
 
-### Email
+### Email, Slack and Telegram
 
 **Send Email** sends through [Resend](https://resend.com): add a Resend key under **API keys** (or
 `RESEND_API_KEY` in `backend/.env`) and send from an address on a domain you verified there
 (`EMAIL_FROM` sets the default; Resend's test sender `onboarding@resend.dev` only delivers to your
-own Resend account's address). Its **Test mode** shows the email in the run panel instead of
-sending it.
+own Resend account's address). **Slack Message** posts with a Slack bot token (`xoxb-…`, scope
+`chat:write`; invite the bot to the channel) and **Telegram Message** sends from a bot made with
+[@BotFather](https://t.me/BotFather) (people must start the bot first; long plain-text messages are
+split). Save their tokens under **API keys**, or set `SLACK_BOT_TOKEN` / `TELEGRAM_BOT_TOKEN`. All
+three have a **Test mode** that shows the message in the run panel instead of sending it.
 
 ### Schedules
 

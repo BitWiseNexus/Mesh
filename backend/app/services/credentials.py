@@ -11,6 +11,8 @@ _LABELS = {
     CredentialProvider.GEMINI: "Google Gemini",
     CredentialProvider.TAVILY: "Tavily",
     CredentialProvider.RESEND: "Resend",
+    CredentialProvider.SLACK: "Slack",
+    CredentialProvider.TELEGRAM: "Telegram",
     CredentialProvider.HTTP: "HTTP API",
 }
 

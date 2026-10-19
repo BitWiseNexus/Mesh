@@ -80,6 +80,8 @@ export default defineConfig({
             CORS_ORIGINS: JSON.stringify([`http://localhost:${PORT}`]),
             // Never send real email from tests, whatever backend/.env holds.
             RESEND_API_KEY: "",
+            SLACK_BOT_TOKEN: "",
+            TELEGRAM_BOT_TOKEN: "",
           }
         : undefined,
     },

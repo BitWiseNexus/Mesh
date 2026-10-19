@@ -13,6 +13,7 @@ import httpx
 from app.core.config import get_settings
 from app.engine.context import NodeContext
 from app.engine.executor import NodeError, NodeResult, executor
+from app.nodes.executors.accounts import account_key, in_test_mode
 from app.schemas.node_types import NodeType
 
 RESEND_URL = "https://api.resend.com/emails"
@@ -85,13 +86,11 @@ async def send_email(ctx: NodeContext) -> NodeResult:
     }
     result = {"id": None, "sent": False, "from": sender, "to": to, "subject": subject, "body": body}
 
-    if ctx.data.get("test_mode") is True:
+    if in_test_mode(ctx):
         ctx.log(f"Test mode: “{subject}” to {', '.join(to)} wasn't sent")
         return NodeResult(result)
 
-    server_key = settings.resend_api_key
-    key = await ctx.run.secrets.get("resend", str(ctx.data.get("credential_id") or "") or None)
-    key = key or (server_key.get_secret_value() if server_key else None)
+    key = await account_key(ctx, "resend", settings.resend_api_key)
     if not key:
         raise NodeError(
             "No Resend API key: add one under API keys — or switch on Test mode to try the flow "

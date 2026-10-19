@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # account owner's own address.
     resend_api_key: SecretStr | None = None
     email_from: str = "Mesh <onboarding@resend.dev>"
+    # Slack Message (bot token xoxb-…, scope chat:write) and Telegram Message (bot token from
+    # @BotFather); users can save their own.
+    slack_bot_token: SecretStr | None = None
+    telegram_bot_token: SecretStr | None = None
     llm_timeout_seconds: int = Field(default=120, ge=1)
     #: One tool call of an agent (an agent used as a tool counts as one call).
     tool_timeout_seconds: int = Field(default=120, ge=1)

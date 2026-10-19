@@ -9,6 +9,8 @@ export const CREDENTIAL_PROVIDERS = [
   "gemini",
   "tavily",
   "resend",
+  "slack",
+  "telegram",
   "http",
 ] as const;
 export type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
@@ -22,6 +24,8 @@ export const PROVIDER_INFO: Record<
   gemini: { label: "Google Gemini", placeholder: "AIza…", usedBy: "Agents on Gemini models" },
   tavily: { label: "Tavily", placeholder: "tvly-…", usedBy: "Web Search (Tavily)" },
   resend: { label: "Resend", placeholder: "re_…", usedBy: "Send Email" },
+  slack: { label: "Slack", placeholder: "xoxb-…", usedBy: "Slack Message (bot token)" },
+  telegram: { label: "Telegram", placeholder: "123456789:AAH…", usedBy: "Telegram Message (bot token)" },
   http: { label: "HTTP API", placeholder: "Token or API key", usedBy: "API Caller nodes you pick it in" },
 };
 

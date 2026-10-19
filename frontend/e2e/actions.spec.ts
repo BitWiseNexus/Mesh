@@ -35,3 +35,36 @@ test("Send Email: Test mode shows the email; without a key, sending explains why
   await runPanel.getByRole("tab", { name: "Output" }).click();
   await expect(runPanel).toContainText("No Resend API key: add one under API keys");
 });
+
+test("Slack and Telegram messages: Test mode shows them; Telegram without a token explains", async ({
+  editor,
+  page,
+}) => {
+  await editor.open();
+  await importFixture(editor, path.join(__dirname, "fixtures", "messaging-flow.mesh.json"), 3);
+  await editor.readyToRun();
+
+  const runPanel = page.getByRole("region", { name: "Run" });
+  const status = runPanel.getByRole("status", { name: "Run status" });
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("Succeeded", { timeout: 15_000 });
+  const slack = runPanel.getByRole("listitem", { name: "Tell Slack output" });
+  await expect(slack).toContainText('"channel": "#releases"');
+  await expect(slack).toContainText('"sent": false');
+  const telegram = runPanel.getByRole("listitem", { name: "Tell Telegram output" });
+  await expect(telegram).toContainText('"text": "<b>Release 1.0 is out</b>"');
+  await runPanel.getByRole("tab", { name: "Logs" }).click();
+  const log = runPanel.getByRole("list", { name: "Run log" });
+  await expect(log).toContainText("Test mode: the message to #releases wasn't posted");
+  await expect(log).toContainText("Test mode: the message to @mesh_news wasn't sent");
+
+  await editor.node("Tell Telegram").click();
+  await expect(editor.settings.getByRole("combobox", { name: /^Telegram bot token/ })).toBeVisible();
+  await editor.settings
+    .getByRole("switch", { name: "Test mode: show the message instead of sending it" })
+    .click();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("Failed", { timeout: 15_000 });
+  await runPanel.getByRole("tab", { name: "Output" }).click();
+  await expect(runPanel).toContainText("No Telegram bot token: add one under API keys");
+});

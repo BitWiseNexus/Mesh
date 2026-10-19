@@ -4,6 +4,8 @@ app/engine/executor.py)."""
 from app.nodes.executors import (
     action_email,
     action_http_response,
+    action_slack,
+    action_telegram,
     agent,
     hitl_approval,
     http,
@@ -22,6 +24,8 @@ from app.nodes.executors import (
 __all__ = [
     "action_email",
     "action_http_response",
+    "action_slack",
+    "action_telegram",
     "agent",
     "hitl_approval",
     "http",

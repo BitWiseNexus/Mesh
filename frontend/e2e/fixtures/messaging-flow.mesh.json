@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Release announcement",
+  "description": "Posts to Slack and Telegram (in Test mode: nothing is sent).",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "Release 1.0 is out" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_s",
+      "type": "action_slack",
+      "ref": "slack",
+      "data": { "label": "Tell Slack", "channel": "#releases", "text": "{{input}}", "credential_id": "", "test_mode": true },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_g",
+      "type": "action_telegram",
+      "ref": "telegram",
+      "data": {
+        "label": "Tell Telegram",
+        "chat_id": "@mesh_news",
+        "text": "<b>{{trigger.output}}</b>",
+        "format": "html",
+        "credential_id": "",
+        "test_mode": true
+      },
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_s", "targetHandle": "in" },
+    { "id": "e2", "source": "node_s", "sourceHandle": "out", "target": "node_g", "targetHandle": "in" }
+  ]
+}
