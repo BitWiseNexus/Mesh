@@ -109,14 +109,15 @@ class RunContext:
         plan: ExecutionPlan,
         *,
         run_id: str,
-        input: str | None,
+        input: Any,
         sink: EventSink,
         secrets: Secrets | None = None,
         knowledge: Knowledge | None = None,
     ):
         self.plan = plan
         self.run_id = run_id
-        #: The text the run was started with (None → the trigger's default input).
+        #: What the run was started with: text (Run button, API), a webhook's request (a dict,
+        #: app/services/webhooks.py) or None (the trigger's default input).
         self.input = input
         self.sink = sink
         self.secrets: Secrets = secrets or NoSecrets()

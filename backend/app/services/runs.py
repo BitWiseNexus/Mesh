@@ -116,7 +116,7 @@ class RunManager:
         run_id: str,
         owner_uid: str,
         plan: ExecutionPlan,
-        input: str | None,
+        input: Any,
         repository: RunRepository,
         secrets: Secrets | None = None,
         knowledge: Knowledge | None = None,

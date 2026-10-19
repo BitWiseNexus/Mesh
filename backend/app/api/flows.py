@@ -6,8 +6,10 @@ from app.core.auth import CurrentUser
 from app.core.firebase import get_db
 from app.repositories.flows import FlowRepository
 from app.repositories.runs import RunRepository
+from app.repositories.schedules import ScheduleRepository
 from app.schemas.flow import Flow
 from app.schemas.flows_api import FlowMetaUpdate, FlowSummary, FlowUpdate, StoredFlow
+from app.services.schedules import paused, sync_schedules
 
 router = APIRouter(prefix="/flows", tags=["flows"])
 
@@ -27,9 +29,15 @@ async def list_flows(user: CurrentUser, repo: Repo) -> list[FlowSummary]:
     return await repo.list(user.uid)
 
 
+async def _saved(owner_uid: str, flow: StoredFlow) -> StoredFlow:
+    """Every save puts the flow's Schedule triggers into effect (app/services/schedules.py)."""
+    await sync_schedules(ScheduleRepository(get_db()), owner_uid, flow)
+    return flow
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_flow(flow: Flow, user: CurrentUser, repo: Repo) -> StoredFlow:
-    return await repo.create(user.uid, flow)
+    return await _saved(user.uid, await repo.create(user.uid, flow))
 
 
 @router.get("/{flow_id}")
@@ -43,7 +51,9 @@ async def replace_flow(
 ) -> StoredFlow:
     """Replaces name, description and graph. Send `expected_version` to avoid overwriting a
     newer save (409 `version_conflict`)."""
-    return await repo.replace(user.uid, flow_id, body, body.expected_version)
+    return await _saved(
+        user.uid, await repo.replace(user.uid, flow_id, body, body.expected_version)
+    )
 
 
 @router.patch("/{flow_id}")
@@ -62,12 +72,14 @@ async def update_flow_meta(
 
 @router.delete("/{flow_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_flow(flow_id: FlowId, user: CurrentUser, repo: Repo) -> Response:
-    """Deletes the flow and its run history."""
+    """Deletes the flow, its schedules and its run history."""
     await repo.delete(user.uid, flow_id)
+    await ScheduleRepository(get_db()).delete_for_flow(flow_id)
     await RunRepository(get_db()).delete_for_flow(user.uid, flow_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{flow_id}/duplicate", status_code=status.HTTP_201_CREATED)
 async def duplicate_flow(flow_id: FlowId, user: CurrentUser, repo: Repo) -> StoredFlow:
-    return await repo.duplicate(user.uid, flow_id)
+    """The copy's Schedule triggers start switched off."""
+    return await _saved(user.uid, await repo.duplicate(user.uid, flow_id, prepare_nodes=paused))

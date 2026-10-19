@@ -43,6 +43,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Schedule triggers (Phase 8): kept in step with saved flows by the API, read by the scheduler.
+    match /schedules/{scheduleId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

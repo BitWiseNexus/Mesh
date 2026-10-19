@@ -20,6 +20,7 @@ import { CredentialField } from "./credential-field";
 import { KnowledgeBaseField } from "./knowledge-base-field";
 import { ModelField } from "./model-field";
 import { ReferencePicker } from "./reference-picker";
+import { TimezoneField } from "./timezone-field";
 
 interface FieldProps<F extends FieldDef = FieldDef> {
   field: F;
@@ -212,6 +213,21 @@ export function ConfigField({ field, value, onChange, invalid, nodeId }: FieldPr
           required={field.required}
         />
       );
+      break;
+    case "cron":
+      control = (
+        <Input
+          id={id}
+          {...a11y}
+          value={typeof value === "string" ? value : ""}
+          spellCheck={false}
+          className="font-mono"
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+      break;
+    case "timezone":
+      control = <TimezoneField id={id} value={value} onChange={onChange} placeholder={field.placeholder} />;
       break;
     case "number":
       control = (

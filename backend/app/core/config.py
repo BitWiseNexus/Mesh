@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     #: How long a finished run's events stay available for (re)connecting streams.
     run_events_retention_seconds: int = Field(default=300, ge=0)
 
+    # Webhook triggers (POST /hooks/{flow_id}/{node_id}).
+    webhook_max_body_bytes: int = Field(default=1_000_000, ge=1)
+    #: Requests each webhook accepts per minute; more get 429 `rate_limited`.
+    webhook_requests_per_minute: int = Field(default=60, ge=1)
+
+    # Schedule triggers: checked once a minute by an in-process scheduler (one backend instance
+    # is enough; several are safe — each due time is claimed once). Off → schedules never fire.
+    scheduler_enabled: bool = True
+    #: A run due longer ago than this (the server wasn't running) is skipped, not caught up.
+    schedule_grace_seconds: int = Field(default=300, ge=0)
+
     # LLM providers (read by LiteLLM). Per-user keys arrive with the credentials store (Phase 4).
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None

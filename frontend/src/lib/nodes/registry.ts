@@ -72,6 +72,10 @@ export type FieldDef = {
   | { kind: "credential"; providers: string[] }
   /** An LLM model name (suggestions from GET /models; any name is accepted). */
   | { kind: "model" }
+  /** A 5-part cron expression (checked by `lib/cron.ts`). */
+  | { kind: "cron" }
+  /** An IANA timezone name; empty = UTC. */
+  | { kind: "timezone" }
 );
 
 export interface NodeDefinition {

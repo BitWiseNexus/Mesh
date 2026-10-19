@@ -9,13 +9,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api import runs as runs_api
 from app.core.auth import AuthUser, get_current_user
 from app.core.config import Settings
 from app.core.firebase import get_db
 from app.main import app
 from app.repositories.runs import RunRepository
 from app.schemas.node_types import NodeType
+from app.services import launch
 from tests.conftest import FIRESTORE_EMULATOR, requires_firestore_emulator
 from tests.flows import edge, node
 
@@ -242,7 +242,7 @@ def test_unknown_runs_are_not_found(client: TestClient) -> None:
 
 
 def test_too_many_active_runs(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runs_api, "get_settings", lambda: Settings(max_active_runs_per_user=1))
+    monkeypatch.setattr(launch, "get_settings", lambda: Settings(max_active_runs_per_user=1))
     flow_id = create_flow(client)
     run = start(client, flow_id, input=" ".join(["word"] * 300))
     response = client.post(f"/flows/{flow_id}/runs", json={})

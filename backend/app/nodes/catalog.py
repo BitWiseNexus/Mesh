@@ -41,7 +41,8 @@ class OptionSpec(_Spec):
 #: `knowledge_base` holds the id of one of the user's knowledge bases (picked from a list);
 #: `credential` the id of one of their saved API keys (empty = automatic, see `providers`).
 #: `model` holds an LLM model name (any text; the editor suggests the models the server offers,
-#: see app/llm/models.py and GET /models).
+#: see app/llm/models.py and GET /models). `cron` is a 5-part cron expression (checked by
+#: app/services/cron.py); `timezone` an IANA timezone name (empty = UTC).
 FieldKind = Literal[
     "text",
     "textarea",
@@ -53,6 +54,8 @@ FieldKind = Literal[
     "knowledge_base",
     "credential",
     "model",
+    "cron",
+    "timezone",
 ]
 
 
@@ -266,11 +269,10 @@ _SPECS: list[NodeSpec] = [
     trigger(
         type=T.TRIGGER_WEBHOOK,
         ref_prefix="webhook",
-        output_hint="The request: {body, query, headers}",
-        coming_soon=True,
+        output_hint="The request: {method, query, headers, body}",
         label="Webhook",
-        description="Start the flow when an HTTP request hits this flow's URL.",
-        default_data={"method": "POST", "secret": ""},
+        description="Start the flow when an HTTP request hits this trigger's URL.",
+        default_data={"method": "POST", "secret": "", "test_body": ""},
         fields=[
             FieldSpec(
                 key="method", label="Method", kind="select", options=options("POST", "GET", "PUT")
@@ -280,21 +282,34 @@ _SPECS: list[NodeSpec] = [
                 "Secret",
                 help="Optional. Callers must send it in the X-Mesh-Secret header.",
             ),
+            textarea(
+                "test_body",
+                "Test body",
+                rows=4,
+                placeholder='{"name": "Ada"}',
+                help="The request body when you run the flow from the editor. JSON is parsed.",
+            ),
         ],
     ),
     trigger(
         type=T.TRIGGER_CRON,
         ref_prefix="schedule",
-        output_hint="When it fired: {scheduled_at}",
-        coming_soon=True,
+        output_hint="When it fired: {scheduled_at, timezone}",
         label="Schedule",
-        description="Run on a cron schedule.",
-        default_data={"cron": "0 9 * * *", "timezone": "UTC"},
+        description="Run the flow on a schedule.",
+        default_data={"cron": "0 9 * * *", "timezone": "UTC", "enabled": True},
         fields=[
-            text(
-                "cron", "Cron expression", required=True, help="e.g. 0 9 * * 1-5 = 9:00 on weekdays"
+            FieldSpec(
+                key="cron",
+                label="Cron expression",
+                kind="cron",
+                required=True,
+                help="minute hour day month weekday — e.g. 0 9 * * 1-5 = 9:00 on weekdays, "
+                "*/15 * * * * = every 15 minutes.",
             ),
-            text("timezone", "Timezone", placeholder="UTC"),
+            FieldSpec(key="timezone", label="Timezone", kind="timezone", placeholder="UTC"),
+            # Off pauses the schedule without removing it (copies of a flow start off).
+            FieldSpec(key="enabled", label="Run on this schedule", kind="switch"),
         ],
     ),
     trigger(

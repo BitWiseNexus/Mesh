@@ -7,6 +7,10 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+# No background scheduler in tests: it would fire schedules from whatever Firestore the settings
+# point at (the dev emulator by default). Tests call `Scheduler.tick` themselves.
+os.environ["SCHEDULER_ENABLED"] = "false"
+
 # Emulator tests run only against emulators named explicitly in the environment, as
 # `firebase emulators:exec` does (`npm run test:backend`, CI). Never against the `npm run dev` ones
 # by default: the API tests wipe Firestore between tests, which would delete the developer's flows.

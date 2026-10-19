@@ -8,6 +8,8 @@ class ApiError(Exception):
     status_code = 400
     code = "bad_request"
     message = "Bad request."
+    #: Response headers (e.g. `Allow`, `Retry-After`).
+    headers: dict[str, str] | None = None
 
     def __init__(self, message: str | None = None, **extra: object) -> None:
         super().__init__(message or self.message)
@@ -39,4 +41,5 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": {"code": exc.code, "message": exc.message, **exc.extra}},
+            headers=exc.headers,
         )

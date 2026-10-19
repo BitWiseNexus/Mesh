@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Greet signups",
+  "description": "A webhook greets whoever signed up; the manual trigger is there to show runs say which trigger started them.",
+  "nodes": [
+    {
+      "id": "node_w",
+      "type": "trigger_webhook",
+      "ref": "signup",
+      "data": {
+        "label": "Signup hook",
+        "method": "POST",
+        "secret": "s3cret",
+        "test_body": "{\"name\": \"Test\"}"
+      },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_m",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "Manual run" },
+      "position": { "x": 0, "y": 250 }
+    },
+    {
+      "id": "node_a",
+      "type": "agent_node",
+      "ref": "greeter",
+      "data": { "label": "Greeter", "model": "mock/echo", "prompt": "Hello {{signup.output.body.name}}" },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "greeting",
+      "data": { "label": "Greeting" },
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_w", "sourceHandle": "out", "target": "node_a", "targetHandle": "in" },
+    { "id": "e2", "source": "node_a", "sourceHandle": "out", "target": "node_o", "targetHandle": "in" },
+    { "id": "e3", "source": "node_m", "sourceHandle": "out", "target": "node_o", "targetHandle": "in" }
+  ]
+}

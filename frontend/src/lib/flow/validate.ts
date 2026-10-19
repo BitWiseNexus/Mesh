@@ -7,6 +7,7 @@
  * - error   → the flow can't run (Run is blocked)
  * - warning → the flow runs, but part of it will never execute or is likely a mistake
  */
+import { cronProblem } from "@/lib/cron";
 import { NODE_REGISTRY, nodeDisplayName, type FieldDef } from "@/lib/nodes/registry";
 import type { NodeData } from "@/types/flow";
 
@@ -64,6 +65,8 @@ export function fieldValueProblem(field: FieldDef, value: unknown): string | nul
       return typeof value === "string" ? null : "must be a knowledge base";
     case "credential":
       return typeof value === "string" ? null : "must be one of your saved keys";
+    case "cron":
+      return typeof value === "string" ? cronProblem(value) : "must be text";
     default:
       return typeof value === "string" ? null : "must be text";
   }

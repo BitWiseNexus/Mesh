@@ -10,7 +10,9 @@ from app.nodes.executors import (
     logic_if,
     logic_loop,
     output_display,
+    trigger_cron,
     trigger_manual,
+    trigger_webhook,
     web_scraper,
     web_search,
 )
@@ -24,7 +26,9 @@ __all__ = [
     "logic_if",
     "logic_loop",
     "output_display",
+    "trigger_cron",
     "trigger_manual",
+    "trigger_webhook",
     "web_scraper",
     "web_search",
 ]

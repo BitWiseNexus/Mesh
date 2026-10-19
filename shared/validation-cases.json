@@ -274,10 +274,23 @@
       "warnings": []
     },
     {
+      "name": "a schedule needs a valid cron expression",
+      "nodes": [
+        { "id": "s", "type": "trigger_cron", "data": { "cron": "0 9 * * MON#2" } },
+        { "id": "ok", "type": "trigger_cron", "data": { "cron": "*/5 9-17 * * mon-fri", "timezone": "Asia/Kolkata" } }
+      ],
+      "edges": [],
+      "errors": ["invalid:s:cron"],
+      "warnings": [],
+      "messages": {
+        "invalid:s:cron": "“Schedule”: Cron expression has an invalid day of the week: “MON#2”"
+      }
+    },
+    {
       "name": "only templated fields are checked for references",
       "nodes": [{ "id": "w", "type": "trigger_webhook", "data": { "secret": "{{nonsense}}" } }],
       "edges": [],
-      "errors": ["unavailable:w"],
+      "errors": [],
       "warnings": []
     },
     {

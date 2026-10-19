@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatRelativeTime } from "@/lib/format";
+import { nodeDisplayName, nodeRole } from "@/lib/nodes/registry";
 import { runKeys, runsApi, type RunStatus, type RunSummary } from "@/lib/runs-api";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
@@ -48,6 +49,14 @@ function StatusIcon({ status }: { status: RunStatus }) {
   );
 }
 
+/** Trigger names by id — only when the flow has several, so runs say which one started them. */
+function triggerNames(): Map<string, string> | null {
+  const triggers = useFlowStore.getState().nodes.filter((n) => nodeRole(n.type) === "start");
+  return triggers.length > 1
+    ? new Map(triggers.map((n) => [n.id, nodeDisplayName(n.type, n.data)]))
+    : null;
+}
+
 function duration(run: RunSummary): string | null {
   if (!run.started_at || !run.finished_at) return null;
   const seconds = (Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000;
@@ -68,6 +77,7 @@ export function RunHistoryMenu({ onShow }: { onShow: (runId: string) => void }) 
     queryFn: () => runs.list(flowId!),
     enabled: open && flowId !== null,
   });
+  const triggers = open ? triggerNames() : null; // read when opened: no re-render on every drag
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -108,6 +118,7 @@ export function RunHistoryMenu({ onShow }: { onShow: (runId: string) => void }) 
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {[
+                      triggers?.get(run.trigger_id),
                       duration(run),
                       version !== null && run.flow_version !== version
                         ? `flow version ${run.flow_version}`

@@ -1,0 +1,51 @@
+{
+  "description": "Cron expressions the Schedule trigger accepts, and the problem reported for others. Run by backend/tests/test_cron.py and frontend/src/lib/cron.test.ts: both checkers must agree.",
+  "cases": [
+    { "expression": "0 9 * * *", "problem": null },
+    { "expression": "  0   9 * * *  ", "problem": null },
+    { "expression": "*/15 * * * *", "problem": null },
+    { "expression": "0 9 * * 1-5", "problem": null },
+    { "expression": "0 9 * * MON-FRI", "problem": null },
+    { "expression": "0 9 * * mon,wed,fri", "problem": null },
+    { "expression": "0 0 * * sun-sat", "problem": null },
+    { "expression": "0 0 * * 7", "problem": null },
+    { "expression": "* * * * 1-7", "problem": null },
+    { "expression": "30 2 1 JAN *", "problem": null },
+    { "expression": "0 12 * oct-dec *", "problem": null },
+    { "expression": "0 0 1-15/2 * *", "problem": null },
+    { "expression": "1-5/2 * * * *", "problem": null },
+    { "expression": "5/15 * * * *", "problem": null },
+    { "expression": "0,30 8-18 * * *", "problem": null },
+    { "expression": "59 23 31 12 0", "problem": null },
+    {
+      "expression": "* * * *",
+      "problem": "must have 5 parts: minute, hour, day of the month, month and day of the week"
+    },
+    {
+      "expression": "* * * * * *",
+      "problem": "must have 5 parts: minute, hour, day of the month, month and day of the week"
+    },
+    {
+      "expression": "@daily",
+      "problem": "must have 5 parts: minute, hour, day of the month, month and day of the week"
+    },
+    { "expression": "61 * * * *", "problem": "has an invalid minute: “61”" },
+    { "expression": "-1 * * * *", "problem": "has an invalid minute: “-1”" },
+    { "expression": "a * * * *", "problem": "has an invalid minute: “a”" },
+    { "expression": "*/0 * * * *", "problem": "has an invalid minute: “*/0”" },
+    { "expression": "*/60 * * * *", "problem": "has an invalid minute: “*/60”" },
+    { "expression": "5-1 * * * *", "problem": "has an invalid minute: “5-1”" },
+    { "expression": "1,,2 * * * *", "problem": "has an invalid minute: “1,,2”" },
+    { "expression": "1- * * * *", "problem": "has an invalid minute: “1-”" },
+    { "expression": "* 24 * * *", "problem": "has an invalid hour: “24”" },
+    { "expression": "* * 0 * *", "problem": "has an invalid day of the month: “0”" },
+    { "expression": "0 0 L * *", "problem": "has an invalid day of the month: “L”" },
+    { "expression": "* * * 13 *", "problem": "has an invalid month: “13”" },
+    { "expression": "0 0 * JANUARY *", "problem": "has an invalid month: “JANUARY”" },
+    { "expression": "0 0 * mon *", "problem": "has an invalid month: “mon”" },
+    { "expression": "* * * * 8", "problem": "has an invalid day of the week: “8”" },
+    { "expression": "0 0 * * sat-sun", "problem": "has an invalid day of the week: “sat-sun”" },
+    { "expression": "0 0 * * MON#2", "problem": "has an invalid day of the week: “MON#2”" },
+    { "expression": "0 0 * * jan", "problem": "has an invalid day of the week: “jan”" }
+  ]
+}

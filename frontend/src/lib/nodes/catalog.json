@@ -34,9 +34,9 @@
       "type": "trigger_webhook",
       "category": "trigger",
       "label": "Webhook",
-      "description": "Start the flow when an HTTP request hits this flow's URL.",
+      "description": "Start the flow when an HTTP request hits this trigger's URL.",
       "refPrefix": "webhook",
-      "outputHint": "The request: {body, query, headers}",
+      "outputHint": "The request: {method, query, headers, body}",
       "inputs": [],
       "outputs": [
         {
@@ -46,7 +46,8 @@
       ],
       "defaultData": {
         "method": "POST",
-        "secret": ""
+        "secret": "",
+        "test_body": ""
       },
       "fields": [
         {
@@ -77,17 +78,27 @@
           "help": "Optional. Callers must send it in the X-Mesh-Secret header.",
           "required": false,
           "templated": false
+        },
+        {
+          "key": "test_body",
+          "label": "Test body",
+          "kind": "textarea",
+          "help": "The request body when you run the flow from the editor. JSON is parsed.",
+          "placeholder": "{\"name\": \"Ada\"}",
+          "required": false,
+          "templated": false,
+          "rows": 4
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "trigger_cron",
       "category": "trigger",
       "label": "Schedule",
-      "description": "Run on a cron schedule.",
+      "description": "Run the flow on a schedule.",
       "refPrefix": "schedule",
-      "outputHint": "When it fired: {scheduled_at}",
+      "outputHint": "When it fired: {scheduled_at, timezone}",
       "inputs": [],
       "outputs": [
         {
@@ -97,27 +108,35 @@
       ],
       "defaultData": {
         "cron": "0 9 * * *",
-        "timezone": "UTC"
+        "timezone": "UTC",
+        "enabled": true
       },
       "fields": [
         {
           "key": "cron",
           "label": "Cron expression",
-          "kind": "text",
-          "help": "e.g. 0 9 * * 1-5 = 9:00 on weekdays",
+          "kind": "cron",
+          "help": "minute hour day month weekday — e.g. 0 9 * * 1-5 = 9:00 on weekdays, */15 * * * * = every 15 minutes.",
           "required": true,
           "templated": false
         },
         {
           "key": "timezone",
           "label": "Timezone",
-          "kind": "text",
+          "kind": "timezone",
           "placeholder": "UTC",
+          "required": false,
+          "templated": false
+        },
+        {
+          "key": "enabled",
+          "label": "Run on this schedule",
+          "kind": "switch",
           "required": false,
           "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "trigger_email",

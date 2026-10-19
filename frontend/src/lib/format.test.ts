@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatRelativeTime, plural } from "./format";
+import { formatBytes, formatInTimeZone, formatRelativeTime, plural } from "./format";
 
 const now = new Date("2026-10-07T12:00:00Z");
 const ago = (seconds: number) => new Date(now.getTime() - seconds * 1000);
@@ -40,5 +40,13 @@ describe("formatBytes", () => {
     expect(formatBytes(20 * 1024)).toBe("20 KB");
     expect(formatBytes(10_485_760)).toBe("10 MB");
     expect(formatBytes(3 * 1024 ** 3)).toBe("3 GB");
+  });
+});
+
+describe("formatInTimeZone", () => {
+  it("reads the clock in the given timezone", () => {
+    expect(formatInTimeZone("2026-10-19T07:00:00Z", "Europe/Berlin")).toBe("Mon 19 Oct, 09:00");
+    expect(formatInTimeZone("2026-10-19T07:00:00Z", "Asia/Kolkata")).toBe("Mon 19 Oct, 12:30");
+    expect(formatInTimeZone("2026-10-18T23:30:00Z", "UTC")).toBe("Sun 18 Oct, 23:30");
   });
 });

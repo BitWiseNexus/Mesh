@@ -56,6 +56,7 @@ beforeEach(async () => {
     await setDoc(doc(db, "knowledge_bases/alice-kb"), { owner_uid: "alice", name: "Docs" });
     await setDoc(doc(db, "knowledge_bases/alice-kb/documents/d1"), { name: "faq.md" });
     await setDoc(doc(db, "kb_chunks/c1"), { owner_uid: "alice", kb_id: "alice-kb", text: "…" });
+    await setDoc(doc(db, "schedules/alice-flow--1"), { owner_uid: "alice", flow_id: "alice-flow" });
   });
 });
 
@@ -126,6 +127,17 @@ describe("knowledge bases", () => {
     );
     await assertFails(setDoc(doc(db, "knowledge_bases", "new"), { owner_uid: "alice" }));
     await assertFails(setDoc(doc(db, "kb_chunks", "new"), { owner_uid: "alice" }));
+  });
+});
+
+describe("schedules", () => {
+  it("are API-only: not even their owner can read or write them", async () => {
+    const db = as("alice");
+    await assertFails(getDoc(doc(db, "schedules/alice-flow--1")));
+    await assertFails(
+      getDocs(query(collection(db, "schedules"), where("owner_uid", "==", "alice"))),
+    );
+    await assertFails(setDoc(doc(db, "schedules", "new"), { owner_uid: "alice" }));
   });
 });
 

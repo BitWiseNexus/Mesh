@@ -18,6 +18,8 @@ import { useFlowStore } from "@/stores/flow-store";
 import { ConfigField } from "./config-fields";
 import { FLOATING_PANEL } from "./panels";
 import { RefField } from "./ref-field";
+import { ScheduleStatus } from "./schedule-status";
+import { WebhookUrl } from "./webhook-url";
 
 const NO_ISSUES: FlowIssue[] = [];
 
@@ -95,6 +97,9 @@ export function NodeConfigPanel() {
           </div>
 
           {node.ref && <RefField nodeId={node.id} current={node.ref} />}
+
+          {node.type === "trigger_webhook" && <WebhookUrl nodeId={node.id} data={node.data} />}
+          {node.type === "trigger_cron" && <ScheduleStatus nodeId={node.id} />}
 
           {def.fields.length > 0 && <Separator />}
 

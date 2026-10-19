@@ -22,6 +22,8 @@ from tests.flows import edge, flow, node, tool_edge
 def test_registered_executors() -> None:
     assert runnable_types() == {
         NodeType.TRIGGER_MANUAL,
+        NodeType.TRIGGER_WEBHOOK,
+        NodeType.TRIGGER_CRON,
         NodeType.HITL_APPROVAL,
         NodeType.LOGIC_IF,
         NodeType.LOGIC_LOOP,

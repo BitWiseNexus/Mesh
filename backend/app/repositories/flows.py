@@ -11,7 +11,10 @@ every nested field by default: wasted writes and a risk of hitting per-document 
 `graph` is exempted from indexing in firebase/firestore.indexes.json.
 """
 
+from __future__ import annotations  # the `list` method shadows the builtin in annotations
+
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,7 +22,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from app.core.errors import ConflictError, NotFoundError, PayloadTooLargeError
-from app.schemas.flow import Flow
+from app.schemas.flow import Flow, Node
 from app.schemas.flows_api import FlowSummary, StoredFlow
 
 COLLECTION = "flows"
@@ -116,6 +119,13 @@ class FlowRepository:
     async def get(self, owner_uid: str, flow_id: str) -> StoredFlow:
         return _to_stored(await self._owned_snapshot(owner_uid, flow_id))
 
+    async def get_with_owner(self, flow_id: str) -> tuple[str, StoredFlow]:
+        """For requests without a signed-in user (webhooks): the flow and its owner's uid."""
+        snapshot = await self._collection.document(flow_id).get()
+        if not snapshot.exists:
+            raise FlowNotFoundError()
+        return snapshot.get("owner_uid"), _to_stored(snapshot)
+
     async def _update(
         self,
         owner_uid: str,
@@ -161,12 +171,17 @@ class FlowRepository:
         await self._owned_snapshot(owner_uid, flow_id)
         await self._collection.document(flow_id).delete()
 
-    async def duplicate(self, owner_uid: str, flow_id: str) -> StoredFlow:
+    async def duplicate(
+        self,
+        owner_uid: str,
+        flow_id: str,
+        prepare_nodes: Callable[[list[Node]], list[Node]] | None = None,
+    ) -> StoredFlow:
         original = await self.get(owner_uid, flow_id)
         copy = Flow(
             name=f"{original.name} (copy)"[:200],
             description=original.description,
-            nodes=original.nodes,
+            nodes=prepare_nodes(original.nodes) if prepare_nodes else original.nodes,
             edges=original.edges,
         )
         return await self.create(owner_uid, copy)

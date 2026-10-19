@@ -84,6 +84,35 @@ what reached it; the run then continues on Approved or Rejected. Waiting runs ke
 Firestore, so they can wait for hours and survive restarts. The bell in the header lists
 everything waiting for you.
 
+### Knowledge bases
+
+Under **Knowledge**, create a knowledge base and upload PDF, text or Markdown files: they're split
+into chunks and embedded (OpenAI or Gemini embedding models; `mock/embedding` works without keys
+outside production). A **Retriever** finds the passages that best match a query — as a step, or
+as a tool an agent calls — and **Add to Knowledge Base** stores text from a run as a new document.
+
+### Webhooks
+
+A **Webhook** trigger gives its flow a URL, shown in the trigger's settings (with a ready-made curl
+command to copy). A request to it with the configured method runs the flow as last saved and
+answers `202 {"run_id": …}` right away; the run appears in **Run history**. The trigger outputs
+the request as `{method, query, headers, body}` (JSON and form bodies are parsed), so later nodes
+can use e.g. `{{webhook.output.body.email}}`. Set a secret to require an `X-Mesh-Secret` header.
+Bodies are limited to 1 MB and each webhook to 60 requests a minute (`WEBHOOK_MAX_BODY_BYTES`,
+`WEBHOOK_REQUESTS_PER_MINUTE`). Pressing **Run** in the editor uses the trigger's Test body
+instead of a request. In production the backend (`NEXT_PUBLIC_API_URL`) must be reachable by
+whoever calls the URL.
+
+### Schedules
+
+A **Schedule** trigger runs its flow on a cron expression (`minute hour day month weekday`, e.g.
+`0 9 * * 1-5` for 9:00 on weekdays) in the timezone you pick. Its settings show the next run
+times — or why it isn't scheduled — and when it last ran; runs appear in **Run history**. The
+trigger outputs `{scheduled_at, timezone}`. Switch "Run on this schedule" off to pause it; copies
+of a flow start with their schedules off. The backend checks schedules once a minute (set
+`SCHEDULER_ENABLED=false` to stop it); a run missed because the server was down is skipped, not
+caught up later.
+
 ## Tests
 
 ```bash

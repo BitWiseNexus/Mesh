@@ -30,6 +30,7 @@ from app.engine.references import InputPart, InvalidPart, RefPart, parse_templat
 from app.nodes.catalog import FieldSpec, get_spec
 from app.schemas.flow import Edge, EdgeType, Flow, Node
 from app.schemas.node_types import NodeCategory, NodeType
+from app.services.cron import cron_problem
 
 
 class FlowIssue(BaseModel):
@@ -92,6 +93,10 @@ def field_value_problem(field: FieldSpec, value: Any) -> str | None:
             )
         case "switch":
             return None if isinstance(value, bool) else "must be on or off"
+        case "cron":
+            return cron_problem(value) if isinstance(value, str) else "must be text"
+        case "timezone":
+            return None if isinstance(value, str) else "must be text"
         case "knowledge_base":
             return None if isinstance(value, str) else "must be a knowledge base"
         case "credential":

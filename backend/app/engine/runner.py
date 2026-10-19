@@ -83,7 +83,7 @@ class Runner:
         plan: ExecutionPlan,
         *,
         run_id: str,
-        input: str | None,
+        input: Any,
         sink: EventSink,
         timeout: float | None = None,
         executors: dict[Any, Executor] | None = None,

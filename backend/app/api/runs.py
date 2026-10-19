@@ -16,7 +16,7 @@ EventSource (which can't send headers).
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -29,12 +29,7 @@ from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.firebase import get_db
 from app.engine.compiler import ExecutionPlan, compile_flow
-from app.engine.executor import not_runnable_issues
 from app.engine.runner import Decision
-from app.engine.validation import FlowIssue
-from app.repositories.chunks import ChunkRepository
-from app.repositories.credentials import CredentialRepository
-from app.repositories.knowledge import KnowledgeBaseRepository
 from app.repositories.runs import RunRepository
 from app.schemas.flow import Flow
 from app.schemas.runs import (
@@ -44,27 +39,14 @@ from app.schemas.runs import (
     RunRequest,
     RunSummary,
 )
-from app.services.credentials import UserSecrets
-from app.services.ingestion import IngestionManager
-from app.services.knowledge import UserKnowledge
+from app.services.launch import (
+    TooManyRunsError,
+    launch_run,
+    owner_services,
+)
 from app.services.runs import RunManager
 
 router = APIRouter(tags=["runs"])
-
-
-class NodesNotRunnableError(ApiError):
-    status_code = 422
-    code = "nodes_not_runnable"
-    message = "Some nodes in this flow can't run yet."
-
-    def __init__(self, issues: list[FlowIssue]) -> None:
-        super().__init__(issues=[i.model_dump(exclude_none=True) for i in issues])
-
-
-class TooManyRunsError(ApiError):
-    status_code = 429
-    code = "too_many_runs"
-    message = "You have too many runs in progress. Wait for one to finish or stop it."
 
 
 def get_run_repository() -> RunRepository:
@@ -78,16 +60,6 @@ def get_run_manager(request: Request) -> RunManager:
 Runs = Annotated[RunRepository, Depends(get_run_repository)]
 Manager = Annotated[RunManager, Depends(get_run_manager)]
 RunId = Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")]
-
-
-def _owner_services(owner_uid: str, ingestion: IngestionManager) -> dict[str, Any]:
-    """What a run needs of its owner's account: saved API keys and knowledge bases."""
-    db = get_db()
-    secrets = UserSecrets(CredentialRepository(db), owner_uid)
-    knowledge = UserKnowledge(
-        KnowledgeBaseRepository(db), ChunkRepository(db), owner_uid, secrets, ingestion
-    )
-    return {"secrets": secrets, "knowledge": knowledge}
 
 
 @router.post("/flows/{flow_id}/runs", status_code=status.HTTP_201_CREATED)
@@ -104,29 +76,15 @@ async def start_run(
     `invalid_trigger` / `nodes_not_runnable` with `issues`, 429 `too_many_runs`."""
     stored = await flows.get(user.uid, flow_id)
     plan = compile_flow(stored, body.trigger_id)
-    if issues := not_runnable_issues(plan):
-        raise NodesNotRunnableError(issues)
-    if manager.active_runs(user.uid) >= get_settings().max_active_runs_per_user:
-        raise TooManyRunsError()
-    info = await runs.create(
+    return await launch_run(
         owner_uid=user.uid,
-        flow_id=flow_id,
-        flow_name=stored.name,
-        flow_version=stored.version,
-        trigger_id=plan.trigger_id,
-        input=body.input,
-    )
-    manager.start(
-        run_id=info.run_id,
-        owner_uid=user.uid,
+        stored=stored,
         plan=plan,
         input=body.input,
-        repository=runs,
-        **_owner_services(user.uid, ingestion),
-        # Kept with the checkpoint if the run pauses: it resumes the flow as it was run.
-        flow_snapshot=Flow.model_validate(stored.model_dump()).model_dump(mode="json"),
+        runs=runs,
+        manager=manager,
+        ingestion=ingestion,
     )
-    return info
 
 
 @router.post("/runs/{run_id}/approvals/{node_id}")
@@ -167,7 +125,7 @@ async def answer_approval(
         plan=plan,
         input=None,  # the checkpoint has the run's input
         repository=runs,
-        **_owner_services(user.uid, ingestion),
+        **owner_services(user.uid, ingestion),
         checkpoint=saved,
         decisions=[Decision(node_id, body.approved, body.content if edited else None, edited)],
         reserved=reserved,
