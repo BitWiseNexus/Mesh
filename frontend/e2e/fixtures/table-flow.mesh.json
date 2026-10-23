@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Save signups",
+  "description": "Writes a row to the Signups table.",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "Ada \"the Countess\"" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_w",
+      "type": "action_db_write",
+      "ref": "save",
+      "data": {
+        "label": "Save signup",
+        "table": "Signups",
+        "row": "{\"name\": \"{{input}}\", \"plan\": \"pro\"}",
+        "row_id": "",
+        "merge": false
+      },
+      "position": { "x": 400, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_w", "targetHandle": "in" }
+  ]
+}

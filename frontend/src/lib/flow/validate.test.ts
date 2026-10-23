@@ -168,9 +168,9 @@ describe("validateFlow", () => {
   it("flags nodes that aren't available yet", () => {
     const nodes = [
       node("t", "trigger_manual"),
-      node("db", "action_db_write", { ...createDefaultData("action_db_write"), collection: "notes" }),
+      node("listen", "trigger_email", createDefaultData("trigger_email")),
     ];
-    expect(ids(nodes, [edge("t", "db")])).toEqual(["unavailable:db"]);
+    expect(ids(nodes, [])).toEqual(["unavailable:listen"]);
   });
 
   it.each([

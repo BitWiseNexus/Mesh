@@ -10,9 +10,9 @@ import pytest
 
 import app.net as net
 from app.core.config import Settings
+from app.engine.escaping import escape_json_strings, escape_url
 from app.engine.executor import NodeError
 from app.net import FetchError, check_url, fetch
-from app.nodes.executors.http import escape_json_strings, escape_url
 from tests.flows import node
 from tests.test_web_tools import mock_http, run_tool
 

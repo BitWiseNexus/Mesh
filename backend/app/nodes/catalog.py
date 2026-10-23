@@ -840,15 +840,40 @@ _SPECS: list[NodeSpec] = [
     ),
     action(
         type=T.ACTION_DB_WRITE,
-        ref_prefix="db_write",
-        output_hint="The written document: {id}",
-        coming_soon=True,
-        label="Database Write",
-        description="Write a document to a Firestore collection.",
-        default_data={"collection": "", "document": "{{input}}"},
+        ref_prefix="table_write",
+        output_hint="The written row: {table, table_id, row_id, created, row}",
+        label="Write to Table",
+        description="Add or update a row in one of your tables (see Tables).",
+        default_data={"table": "", "row": "{{input}}", "row_id": "", "merge": False},
         fields=[
-            text("collection", "Collection", required=True, templated=True),
-            textarea("document", "Document", rows=4, help=TEMPLATE_HELP, templated=True),
+            text(
+                "table",
+                "Table",
+                required=True,
+                placeholder="Signups",
+                templated=True,
+                help="Created on first write. Letters, digits, spaces, “-”, “_” and “.”.",
+            ),
+            textarea(
+                "row",
+                "Row",
+                rows=4,
+                templated=True,
+                help='An object, e.g. {"name": "{{webhook.output.body.name}}", "plan": "pro"} '
+                '(values are escaped into the JSON). Anything else is stored as {"value": …}.',
+            ),
+            text(
+                "row_id",
+                "Row ID",
+                placeholder="Empty: add a new row",
+                templated=True,
+                help="Write this row instead (created if it doesn't exist), e.g. an email address.",
+            ),
+            FieldSpec(
+                key="merge",
+                label="Merge into the existing row (keep fields this one doesn't set)",
+                kind="switch",
+            ),
         ],
     ),
     NodeSpec(

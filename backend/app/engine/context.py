@@ -101,6 +101,29 @@ class NoKnowledge:
         raise NodeError("Knowledge bases aren't available in this run")
 
 
+class Tables(Protocol):
+    """The run owner's tables (app/services/tables.py)."""
+
+    async def write_row(
+        self,
+        table: str,
+        row: dict[str, Any],
+        *,
+        row_id: str | None,
+        merge: bool,
+        flow_id: str | None,
+        run_id: str,
+    ) -> dict[str, Any]:
+        """Adds a row (no `row_id`) or writes that row (replacing it, or merged into it): {table,
+        table_id, row_id, created, row}. Raises NodeError when it can't be written."""
+        ...
+
+
+class NoTables:
+    async def write_row(self, table: str, row: dict[str, Any], **kw: Any) -> dict[str, Any]:
+        raise NodeError("Tables aren't available in this run")
+
+
 class RunContext:
     """Everything a run knows: the plan, the run's input and the outputs produced so far."""
 
@@ -113,6 +136,7 @@ class RunContext:
         sink: EventSink,
         secrets: Secrets | None = None,
         knowledge: Knowledge | None = None,
+        tables: Tables | None = None,
     ):
         self.plan = plan
         self.run_id = run_id
@@ -122,6 +146,7 @@ class RunContext:
         self.sink = sink
         self.secrets: Secrets = secrets or NoSecrets()
         self.knowledge: Knowledge = knowledge or NoKnowledge()
+        self.tables: Tables = tables or NoTables()
         self.outputs: dict[str, Any] = {}
         #: Loop id → how many times it has started its body (see the runner).
         self.iterations: dict[str, int] = {}
@@ -200,9 +225,10 @@ class NodeContext:
                 out.append(escape(text, "".join(out)) if escape else text)
         return "".join(out)
 
-    def value(self, template: str) -> Any:
+    def value(self, template: str, escape: Callable[[str, str], str] | None = None) -> Any:
         """Like `render`, but a template that is exactly one reference (whitespace around it is
-        fine) gives the referenced value itself — an object stays an object."""
+        fine) gives the referenced value itself — an object stays an object. Other templates are
+        rendered with `escape` (see `render`)."""
         parts = [
             p
             for p in parse_template(template)
@@ -211,7 +237,7 @@ class NodeContext:
         if len(parts) == 1 and isinstance(parts[0], InputPart | RefPart):
             value = self._resolve(parts[0])
             return None if value is MISSING else value
-        return self.render(template)
+        return self.render(template, escape)
 
     def field(self, key: str) -> str:
         """A templated config field, rendered."""

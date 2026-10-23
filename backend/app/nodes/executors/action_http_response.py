@@ -1,4 +1,5 @@
 from app.engine.context import NodeContext
+from app.engine.escaping import escape_json_strings, looks_like_json
 from app.engine.executor import NodeError, NodeResult, executor
 from app.schemas.node_types import NodeType
 from app.services.webhooks import ResponseError, build_response
@@ -9,7 +10,9 @@ async def http_response(ctx: NodeContext) -> NodeResult:
     """Prepares the answer to the request that started the run: `{status_code, headers, body}`.
     The webhook endpoint (app/api/webhooks.py) waits for the first of these and sends it; in runs
     without a waiting caller (editor, schedule, a resumed run) it only shows what would be sent."""
-    body = ctx.value(str(ctx.data.get("body") or ""))
+    template = str(ctx.data.get("body") or "")
+    # JSON written around references ({"greeting": "{{input}}"}): values are escaped into it.
+    body = ctx.value(template, escape_json_strings if looks_like_json(template) else None)
     try:
         response = build_response(
             ctx.data.get("status_code"),

@@ -57,6 +57,8 @@ beforeEach(async () => {
     await setDoc(doc(db, "knowledge_bases/alice-kb/documents/d1"), { name: "faq.md" });
     await setDoc(doc(db, "kb_chunks/c1"), { owner_uid: "alice", kb_id: "alice-kb", text: "…" });
     await setDoc(doc(db, "schedules/alice-flow--1"), { owner_uid: "alice", flow_id: "alice-flow" });
+    await setDoc(doc(db, "tables/alice--t1"), { owner_uid: "alice", name: "Signups" });
+    await setDoc(doc(db, "tables/alice--t1/rows/r1"), { data_json: "{}" });
   });
 });
 
@@ -138,6 +140,17 @@ describe("schedules", () => {
       getDocs(query(collection(db, "schedules"), where("owner_uid", "==", "alice"))),
     );
     await assertFails(setDoc(doc(db, "schedules", "new"), { owner_uid: "alice" }));
+  });
+});
+
+describe("tables", () => {
+  it("are API-only: not even their owner can read or write them or their rows", async () => {
+    const db = as("alice");
+    await assertFails(getDoc(doc(db, "tables/alice--t1")));
+    await assertFails(getDocs(query(collection(db, "tables"), where("owner_uid", "==", "alice"))));
+    await assertFails(getDoc(doc(db, "tables/alice--t1/rows/r1")));
+    await assertFails(getDocs(collection(db, "tables/alice--t1/rows")));
+    await assertFails(setDoc(doc(db, "tables/alice--t1/rows/r2"), { data_json: "{}" }));
   });
 });
 

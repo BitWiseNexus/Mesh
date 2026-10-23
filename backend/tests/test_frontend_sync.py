@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas import EdgeType, NodeCategory, NodeType, knowledge
+from app.schemas import EdgeType, NodeCategory, NodeType, knowledge, tables
 from app.schemas.credentials import CredentialProvider
 from app.schemas.flow import MAX_DESCRIPTION_LENGTH, MAX_EDGES, MAX_NAME_LENGTH, MAX_NODES
 
@@ -68,3 +68,9 @@ def test_knowledge_base_limits_match() -> None:
     )
     for name in names:
         assert ts_number(name, file) == getattr(knowledge, name), name
+
+
+def test_table_limits_match() -> None:
+    file = TYPES_DIR / "tables.ts"
+    for name in ("MAX_TABLES_PER_USER", "MAX_ROWS_PER_TABLE"):
+        assert ts_number(name, file) == getattr(tables, name), name

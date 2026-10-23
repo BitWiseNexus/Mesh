@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { href: "/flows", label: "Flows" },
   { href: "/knowledge", label: "Knowledge" },
+  { href: "/tables", label: "Tables" },
 ];
 
 /** Top bar for app pages outside the editor. */

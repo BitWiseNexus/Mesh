@@ -13,6 +13,7 @@ from app.repositories.chunks import ChunkRepository
 from app.repositories.credentials import CredentialRepository
 from app.repositories.knowledge import KnowledgeBaseRepository
 from app.repositories.runs import RunRepository
+from app.repositories.tables import TableRepository
 from app.schemas.flow import Flow
 from app.schemas.flows_api import StoredFlow
 from app.schemas.runs import RunInfo
@@ -20,6 +21,7 @@ from app.services.credentials import UserSecrets
 from app.services.ingestion import IngestionManager
 from app.services.knowledge import UserKnowledge
 from app.services.runs import RunManager
+from app.services.tables import UserTables
 
 
 class NodesNotRunnableError(ApiError):
@@ -38,13 +40,14 @@ class TooManyRunsError(ApiError):
 
 
 def owner_services(owner_uid: str, ingestion: IngestionManager) -> dict[str, Any]:
-    """What a run needs of its owner's account: saved API keys and knowledge bases."""
+    """What a run needs of its owner's account: saved API keys, knowledge bases and tables."""
     db = get_db()
     secrets = UserSecrets(CredentialRepository(db), owner_uid)
     knowledge = UserKnowledge(
         KnowledgeBaseRepository(db), ChunkRepository(db), owner_uid, secrets, ingestion
     )
-    return {"secrets": secrets, "knowledge": knowledge}
+    tables = UserTables(TableRepository(db), owner_uid)
+    return {"secrets": secrets, "knowledge": knowledge, "tables": tables}
 
 
 #: Run records keep at most this much of a run's input (as text; webhook requests as JSON).

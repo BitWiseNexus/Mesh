@@ -19,7 +19,7 @@ from typing import Any
 from app.core.config import Settings
 from app.engine import events
 from app.engine.compiler import ExecutionPlan
-from app.engine.context import Knowledge, Secrets
+from app.engine.context import Knowledge, Secrets, Tables
 from app.engine.events import RunEvent
 from app.engine.runner import Decision, Runner
 from app.repositories.runs import CheckpointTooLargeError, RunRecorder, RunRepository
@@ -120,6 +120,7 @@ class RunManager:
         repository: RunRepository,
         secrets: Secrets | None = None,
         knowledge: Knowledge | None = None,
+        tables: Tables | None = None,
         flow_snapshot: dict[str, Any] | None = None,
         checkpoint: dict[str, Any] | None = None,
         decisions: list[Decision] | None = None,
@@ -149,6 +150,7 @@ class RunManager:
             timeout=self.settings.run_timeout_seconds,
             secrets=secrets,
             knowledge=knowledge,
+            tables=tables,
             checkpoint=(checkpoint or {}).get("state"),
             decisions=decisions,
         )

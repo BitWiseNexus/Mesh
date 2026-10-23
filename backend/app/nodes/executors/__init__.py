@@ -2,6 +2,7 @@
 app/engine/executor.py)."""
 
 from app.nodes.executors import (
+    action_db_write,
     action_email,
     action_http_response,
     action_slack,
@@ -22,6 +23,7 @@ from app.nodes.executors import (
 )
 
 __all__ = [
+    "action_db_write",
     "action_email",
     "action_http_response",
     "action_slack",

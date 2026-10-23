@@ -136,12 +136,12 @@
       "name": "nodes that aren't available yet",
       "nodes": [
         { "id": "t", "type": "trigger_manual" },
-        { "id": "db", "type": "action_db_write", "data": { "collection": "notes" } }
+        { "id": "listen", "type": "trigger_email" }
       ],
-      "edges": [{ "from": "t", "to": "db" }],
-      "errors": ["unavailable:db"],
+      "edges": [],
+      "errors": ["unavailable:listen"],
       "warnings": [],
-      "messages": { "unavailable:db": "“Database Write”: Database Write nodes aren't available yet" }
+      "messages": { "unavailable:listen": "“Email Listener”: Email Listener nodes aren't available yet" }
     },
     {
       "name": "invalid values: number range, type, text",

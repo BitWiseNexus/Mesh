@@ -43,6 +43,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Tables (Phase 9): rows written by flows, read and deleted through the API.
+    match /tables/{tableId}/{document=**} {
+      allow read, write: if false;
+    }
+    match /tables/{tableId} {
+      allow read, write: if false;
+    }
+
     // Schedule triggers (Phase 8): kept in step with saved flows by the API, read by the scheduler.
     match /schedules/{scheduleId} {
       allow read, write: if false;

@@ -1379,10 +1379,10 @@
     {
       "type": "action_db_write",
       "category": "action",
-      "label": "Database Write",
-      "description": "Write a document to a Firestore collection.",
-      "refPrefix": "db_write",
-      "outputHint": "The written document: {id}",
+      "label": "Write to Table",
+      "description": "Add or update a row in one of your tables (see Tables).",
+      "refPrefix": "table_write",
+      "outputHint": "The written row: {table, table_id, row_id, created, row}",
       "inputs": [
         {
           "id": "in",
@@ -1396,28 +1396,48 @@
         }
       ],
       "defaultData": {
-        "collection": "",
-        "document": "{{input}}"
+        "table": "",
+        "row": "{{input}}",
+        "row_id": "",
+        "merge": false
       },
       "fields": [
         {
-          "key": "collection",
-          "label": "Collection",
+          "key": "table",
+          "label": "Table",
           "kind": "text",
+          "help": "Created on first write. Letters, digits, spaces, “-”, “_” and “.”.",
+          "placeholder": "Signups",
           "required": true,
           "templated": true
         },
         {
-          "key": "document",
-          "label": "Document",
+          "key": "row",
+          "label": "Row",
           "kind": "textarea",
-          "help": "Use {{input}} for the previous node's output, or insert another node's output.",
+          "help": "An object, e.g. {\"name\": \"{{webhook.output.body.name}}\", \"plan\": \"pro\"} (values are escaped into the JSON). Anything else is stored as {\"value\": …}.",
           "required": false,
           "templated": true,
           "rows": 4
+        },
+        {
+          "key": "row_id",
+          "label": "Row ID",
+          "kind": "text",
+          "help": "Write this row instead (created if it doesn't exist), e.g. an email address.",
+          "placeholder": "Empty: add a new row",
+          "required": false,
+          "templated": true
+        },
+        {
+          "key": "merge",
+          "label": "Merge into the existing row (keep fields this one doesn't set)",
+          "kind": "switch",
+          "required": false,
+          "templated": false
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "output_display",

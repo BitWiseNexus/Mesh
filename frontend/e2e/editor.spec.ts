@@ -23,14 +23,14 @@ test("home → sign up → empty dashboard → new flow opens on the starter tem
 
 test("palette searches and won't add 'Soon' nodes", async ({ editor, page }) => {
   await editor.open();
-  await expect(editor.palette.locator("button[draggable=true]")).toHaveCount(17);
-  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(4); // + 2 retired, hidden
+  await expect(editor.palette.locator("button[draggable=true]")).toHaveCount(18);
+  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(3); // + 2 retired, hidden
 
-  await page.getByLabel("Search nodes").fill("database");
-  const soon = editor.paletteItem("Database Write");
+  await page.getByLabel("Search nodes").fill("python");
+  const soon = editor.paletteItem("Python Code");
   await expect(soon).toHaveAttribute("aria-disabled", "true");
   await soon.click({ force: true }); // force: Playwright won't click aria-disabled buttons
-  await editor.drop("Database Write", 500, 600, { expectAdded: false });
+  await editor.drop("Python Code", 500, 600, { expectAdded: false });
   await expect(editor.nodes).toHaveCount(2);
 });
 

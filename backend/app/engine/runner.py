@@ -32,7 +32,7 @@ from typing import Any
 
 from app.engine import events
 from app.engine.compiler import ExecutionPlan, PlanEdge
-from app.engine.context import Knowledge, RunContext, Secrets
+from app.engine.context import Knowledge, RunContext, Secrets, Tables
 from app.engine.events import EventSink, NodeStatus, RunStatus
 from app.engine.executor import AwaitApproval, Executor, NodeError, NodeResult, get_executor
 from app.schemas.node_types import NodeType
@@ -89,13 +89,20 @@ class Runner:
         executors: dict[Any, Executor] | None = None,
         secrets: Secrets | None = None,
         knowledge: Knowledge | None = None,
+        tables: Tables | None = None,
         checkpoint: dict[str, Any] | None = None,
         decisions: list[Decision] | None = None,
     ) -> None:
         """`checkpoint` + `decisions`: resume a paused run, answering its waiting gates."""
         self.plan = plan
         self.ctx = RunContext(
-            plan, run_id=run_id, input=input, sink=sink, secrets=secrets, knowledge=knowledge
+            plan,
+            run_id=run_id,
+            input=input,
+            sink=sink,
+            secrets=secrets,
+            knowledge=knowledge,
+            tables=tables,
         )
         self.sink = sink
         self.timeout = timeout

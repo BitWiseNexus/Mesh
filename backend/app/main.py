@@ -15,6 +15,7 @@ from app.api import (
     models,
     runs,
     schedules,
+    tables,
     webhooks,
 )
 from app.core.config import get_settings
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router)
     app.include_router(webhooks.router)
     app.include_router(schedules.router)
+    app.include_router(tables.router)
     register_error_handlers(app)
     return app
 

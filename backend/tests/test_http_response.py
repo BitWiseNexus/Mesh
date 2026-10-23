@@ -2,6 +2,7 @@
 and webhook callers getting the flow's answer (app/api/webhooks.py, Firestore emulator)."""
 
 import asyncio
+import json
 import time
 from typing import Any
 
@@ -96,7 +97,7 @@ def test_problems(status: Any, content_type: str, headers: Any, body: str, messa
 REQUEST = {"method": "POST", "query": {}, "headers": {}, "body": {"name": "Ada"}}
 
 
-def run_response(**data: Any) -> tuple[Any, list[dict]]:
+def run_response(request: dict = REQUEST, **data: Any) -> tuple[Any, list[dict]]:
     events: list[dict] = []
     plan = compile_flow(
         flow(
@@ -104,7 +105,7 @@ def run_response(**data: Any) -> tuple[Any, list[dict]]:
             [edge("w", "r")],
         )
     )
-    outcome = asyncio.run(Runner(plan, run_id="r", input=REQUEST, sink=events.append).run())
+    outcome = asyncio.run(Runner(plan, run_id="r", input=request, sink=events.append).run())
     finished = next(e for e in events if e["type"] == "node_finished" and e["node_id"] == "r")
     return outcome.status, finished
 
@@ -116,6 +117,21 @@ def test_the_node_outputs_the_response() -> None:
         "status_code": 201,
         "headers": {"Content-Type": "application/json"},
         "body": '{"name": "Ada"}',
+    }
+
+
+def test_values_are_escaped_into_json_bodies() -> None:
+    """References inside JSON written in the Body: quotes or line breaks in a value can't break
+    the JSON (a bug in the first version of the node)."""
+    tricky = {**REQUEST, "body": {"name": 'Ada "the Countess"\nLovelace'}}
+    status, finished = run_response(
+        tricky,
+        body='{"greeting": "Hello {{webhook.output.body.name}}"}',
+        content_type="application/json",
+    )
+    assert status == "succeeded", finished
+    assert json.loads(finished["output"]["body"]) == {
+        "greeting": 'Hello Ada "the Countess"\nLovelace'
     }
 
 
