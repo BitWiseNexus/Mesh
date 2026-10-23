@@ -72,6 +72,8 @@ export function fieldValueProblem(field: FieldDef, value: unknown): string | nul
   }
 }
 
+const WORKER_TYPES = new Set<string | undefined>(["agent_node", "agent_supervisor"]);
+
 export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssue[] {
   const issues: FlowIssue[] = [];
   const name = (n: CanvasNode) => `“${nodeDisplayName(n.type, n.data)}”`;
@@ -216,6 +218,18 @@ export function validateFlow(nodes: CanvasNode[], edges: CanvasEdge[]): FlowIssu
         severity: "warning",
         nodeId: node.id,
         message: `${name(node)} answers the caller of a Webhook trigger, but no Webhook trigger leads to it`,
+      });
+    }
+
+    if (
+      node.type === "agent_supervisor" &&
+      !toolEdges.some((e) => e.source === node.id && WORKER_TYPES.has(byId.get(e.target)?.type))
+    ) {
+      issues.push({
+        id: `no-workers:${node.id}`,
+        severity: "warning",
+        nodeId: node.id,
+        message: `${name(node)} has no worker agents — connect agents to its Tools handle`,
       });
     }
 

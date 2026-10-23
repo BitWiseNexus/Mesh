@@ -66,7 +66,9 @@ production.
 
 Attach nodes to an agent's **Tools** handle and the agent can call them: **Web Search** (Tavily
 with a key, DuckDuckGo without), **Web Scraper** (a page's readable text), **API Caller** (any
-REST endpoint) and **other agents**. In an API Caller or sub-agent, `{{input.<name>}}` declares a
+REST endpoint) and **other agents**. A **Supervisor Agent** leads a team: connect worker agents to
+its Tools handle and it splits the task, hands out the parts (in parallel where it can) and
+combines the answers. In an API Caller or sub-agent, `{{input.<name>}}` declares a
 value the agent fills in. Tools that fetch URLs can't reach private or local addresses in
 production.
 

@@ -274,6 +274,27 @@
       "warnings": []
     },
     {
+      "name": "a supervisor needs worker agents",
+      "nodes": [
+        { "id": "t", "type": "trigger_manual" },
+        { "id": "lead", "type": "agent_supervisor", "data": { "model": "mock/tools" } },
+        { "id": "alone", "type": "agent_supervisor", "data": { "model": "mock/tools" } },
+        { "id": "writer", "type": "agent_node", "data": { "model": "mock/echo" } },
+        { "id": "search", "type": "tool_web_search" }
+      ],
+      "edges": [
+        { "from": "t", "to": "lead" },
+        { "from": "t", "to": "alone" },
+        { "from": "lead", "to": "writer", "type": "tool_connection" },
+        { "from": "alone", "to": "search", "type": "tool_connection" }
+      ],
+      "errors": [],
+      "warnings": ["no-workers:alone"],
+      "messages": {
+        "no-workers:alone": "“Supervisor Agent” has no worker agents — connect agents to its Tools handle"
+      }
+    },
+    {
       "name": "an HTTP Response only answers webhook callers",
       "nodes": [
         { "id": "hook", "type": "trigger_webhook" },

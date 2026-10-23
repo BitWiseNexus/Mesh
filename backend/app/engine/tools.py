@@ -47,6 +47,8 @@ class ToolKind:
     parameters: Schema | None = None
     #: Default description for the model (when the node has no "Description for the agent").
     description: Callable[[PlannedNode], str] | None = None
+    #: How the single `input` parameter is described (when `{{input}}` is the whole argument).
+    input_description: str = "What to pass to this tool"
 
 
 _TOOL_KINDS: dict[NodeType, ToolKind] = {}
@@ -57,13 +59,16 @@ def tool(
     *,
     parameters: Schema | None = None,
     description: Callable[[PlannedNode], str] | None = None,
+    input_description: str | None = None,
 ) -> Callable[[Executor], Executor]:
     """Registers the decorated executor as `node_type`'s implementation when used as a tool."""
 
     def register(fn: Executor) -> Executor:
         if node_type in _TOOL_KINDS:
             raise RuntimeError(f"A tool for {node_type} is already registered")
-        _TOOL_KINDS[node_type] = ToolKind(fn, parameters, description)
+        _TOOL_KINDS[node_type] = ToolKind(
+            fn, parameters, description, input_description or ToolKind.input_description
+        )
         return fn
 
     return register
@@ -74,7 +79,9 @@ def get_tool_kind(node_type: NodeType) -> ToolKind | None:
     return _TOOL_KINDS.get(node_type)
 
 
-def input_parameters(node: PlannedNode) -> tuple[Schema, bool]:
+def input_parameters(
+    node: PlannedNode, input_description: str = "What to pass to this tool"
+) -> tuple[Schema, bool]:
     """Parameters declared by `{{input…}}` references in the node's templated fields, and whether
     `{{input}}` is the single `input` argument (True) rather than the arguments object."""
     names: dict[str, None] = {}
@@ -90,7 +97,7 @@ def input_parameters(node: PlannedNode) -> tuple[Schema, bool]:
                 else:
                     bare = True
     if not names and bare:
-        return object_schema({"input": "What to pass to this tool"}), True
+        return object_schema({"input": input_description}), True
     return object_schema({name: f"Value for {{{{input.{name}}}}}" for name in names}), False
 
 
@@ -146,7 +153,7 @@ def agent_tools(plan: ExecutionPlan, agent_id: str) -> list[AgentTool]:
         if kind.parameters is not None:
             parameters, bare = kind.parameters, False
         else:
-            parameters, bare = input_parameters(node)
+            parameters, bare = input_parameters(node, kind.input_description)
         custom = node.data.get("tool_description")
         if isinstance(custom, str) and custom.strip():
             description = custom.strip()

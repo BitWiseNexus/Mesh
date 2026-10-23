@@ -23,8 +23,8 @@ test("home → sign up → empty dashboard → new flow opens on the starter tem
 
 test("palette searches and won't add 'Soon' nodes", async ({ editor, page }) => {
   await editor.open();
-  await expect(editor.palette.locator("button[draggable=true]")).toHaveCount(18);
-  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(3); // + 2 retired, hidden
+  await expect(editor.palette.locator("button[draggable=true]")).toHaveCount(19);
+  await expect(editor.palette.getByText("Soon", { exact: true })).toHaveCount(2); // + 2 retired, hidden
 
   await page.getByLabel("Search nodes").fill("python");
   const soon = editor.paletteItem("Python Code");

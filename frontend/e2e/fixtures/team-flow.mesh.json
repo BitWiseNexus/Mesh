@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "flow_id": null,
+  "name": "Launch team",
+  "description": "A supervisor hands the task to two workers and combines their answers (mock models: no keys needed).",
+  "nodes": [
+    {
+      "id": "node_t",
+      "type": "trigger_manual",
+      "ref": "trigger",
+      "data": { "input": "Plan the launch" },
+      "position": { "x": 0, "y": 0 }
+    },
+    {
+      "id": "node_s",
+      "type": "agent_supervisor",
+      "ref": "lead",
+      "data": { "label": "Team Lead", "model": "mock/tools", "prompt": "{{input}}", "max_rounds": 3 },
+      "position": { "x": 400, "y": 0 }
+    },
+    {
+      "id": "node_w",
+      "type": "agent_node",
+      "ref": "writer",
+      "data": { "label": "Writer", "model": "mock/echo", "prompt": "Copy for: {{input}}" },
+      "position": { "x": 250, "y": 300 }
+    },
+    {
+      "id": "node_r",
+      "type": "agent_node",
+      "ref": "researcher",
+      "data": { "label": "Researcher", "model": "mock/echo", "prompt": "Facts for: {{input}}" },
+      "position": { "x": 600, "y": 300 }
+    },
+    {
+      "id": "node_o",
+      "type": "output_display",
+      "ref": "plan",
+      "data": { "label": "Plan" },
+      "position": { "x": 800, "y": 0 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node_t", "sourceHandle": "out", "target": "node_s", "targetHandle": "in" },
+    { "id": "e2", "source": "node_s", "sourceHandle": "out", "target": "node_o", "targetHandle": "in" },
+    { "id": "e3", "source": "node_s", "sourceHandle": "tools", "target": "node_w", "targetHandle": "tool", "type": "tool_connection" },
+    { "id": "e4", "source": "node_s", "sourceHandle": "tools", "target": "node_r", "targetHandle": "tool", "type": "tool_connection" }
+  ]
+}

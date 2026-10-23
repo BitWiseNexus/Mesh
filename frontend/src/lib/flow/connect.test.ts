@@ -54,16 +54,20 @@ describe("pickableTypes", () => {
     const before = pickableTypes(connect("a", "in", "target"), nodes);
     expect(before).toContain("trigger_manual");
     expect(before).not.toContain("output_display");
-    // An agent's Tools handle: tools, agents and the Retriever (they can be tools).
+    // An agent's Tools handle: tools, agents (and supervisors) and the Retriever.
     expect(pickableTypes(connect("a", "tools", "source"), nodes)).toEqual([
       "agent_node",
+      "agent_supervisor",
       "tool_web_search",
       "tool_web_scraper",
       "tool_http",
       "kb_retriever",
     ]);
     // A tool's handle, dragged backwards: the agents that can use it.
-    expect(pickableTypes(connect("s", "tool", "target"), nodes)).toEqual(["agent_node"]);
+    expect(pickableTypes(connect("s", "tool", "target"), nodes)).toEqual([
+      "agent_node",
+      "agent_supervisor",
+    ]);
     // Into an edge: one data input and one data output.
     const split = pickableTypes({ kind: "split", edgeId: "e1" }, nodes);
     expect(split).toContain("agent_node");

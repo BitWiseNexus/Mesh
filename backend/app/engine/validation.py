@@ -112,6 +112,9 @@ def with_defaults(flow: Flow) -> Flow:
     return flow.model_copy(update={"nodes": nodes})
 
 
+_WORKER_TYPES = (NodeType.AGENT_NODE, NodeType.AGENT_SUPERVISOR)
+
+
 def validate_flow(flow: Flow) -> list[FlowIssue]:
     """All problems with `flow`, errors first, otherwise in canvas order."""
     flow = with_defaults(flow)
@@ -242,6 +245,15 @@ def validate_flow(flow: Flow) -> list[FlowIssue]:
                 f"no-webhook:{node.id}",
                 f"{name(node)} answers the caller of a Webhook trigger, but no Webhook trigger "
                 "leads to it",
+                **at,
+            )
+
+        if node.type is NodeType.AGENT_SUPERVISOR and not any(
+            e.source == node.id and by_id[e.target].type in _WORKER_TYPES for e in tool_edges
+        ):
+            warning(
+                f"no-workers:{node.id}",
+                f"{name(node)} has no worker agents — connect agents to its Tools handle",
                 **at,
             )
 

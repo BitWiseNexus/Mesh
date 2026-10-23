@@ -348,6 +348,7 @@
           "key": "system_prompt",
           "label": "System prompt",
           "kind": "textarea",
+          "help": "Added to its built-in instructions (lead the team connected to its Tools handle, delegate, combine the results).",
           "placeholder": "You are a helpful assistant…",
           "required": false,
           "templated": true,
@@ -376,6 +377,7 @@
           "key": "max_rounds",
           "label": "Max delegation rounds",
           "kind": "number",
+          "help": "Rounds of handing out work before it has to answer.",
           "required": false,
           "templated": false,
           "min": 1,
@@ -393,7 +395,7 @@
           "rows": 2
         }
       ],
-      "comingSoon": true
+      "comingSoon": false
     },
     {
       "type": "tool_web_search",

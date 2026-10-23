@@ -180,10 +180,11 @@ test("drop a connection on empty canvas to add a connected node", async ({ edito
   await expect(editor.nodes).toHaveCount(3);
   await expect(editor.edges).toHaveCount(2);
 
-  // From an agent's Tools handle only tools (and agents) fit; the edge is a tool attachment.
+  // From an agent's Tools handle only tools (and agents, supervisors) fit; the edge is a tool attachment.
   await dragConnectionTo(editor, editor.handle("Echo Agent", "tools", "source"), agentBox.x + 120, agentBox.y + 250);
   await expect(options(editor)).toHaveText([
     /^Agent/,
+    /^Supervisor Agent/,
     /^Web Search/,
     /^Web Scraper/,
     /^API Caller/,

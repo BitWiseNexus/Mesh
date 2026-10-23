@@ -2,9 +2,12 @@ import asyncio
 
 from app.engine.context import NodeContext
 from app.engine.executor import NodeError, NodeResult, executor
-from app.engine.tools import agent_tools, call_tool, tool
+from app.engine.tools import AgentTool, agent_tools, call_tool, tool
 from app.llm import LlmError, Message, complete, provider_of
 from app.schemas.node_types import NodeType
+
+#: What an agent used as a tool (or worker) receives: its Task's `{{input}}`.
+AGENT_TASK = "The task: everything the agent needs to know (it can't see this conversation)"
 
 
 @tool(
@@ -13,6 +16,7 @@ from app.schemas.node_types import NodeType
         f"Ask the “{node.name}” agent to do something; it answers with text. Pass everything it "
         "needs to know."
     ),
+    input_description=AGENT_TASK,
 )
 @executor(NodeType.AGENT_NODE)
 async def agent(ctx: NodeContext) -> NodeResult:
@@ -21,6 +25,27 @@ async def agent(ctx: NodeContext) -> NodeResult:
     it must answer. Text streams as token events; the output is the final answer.
 
     Also runs agents attached to another agent as tools: their `{{input}}` is the arguments."""
+    return await converse(ctx, ctx.field("system_prompt"), steps_setting(ctx, "max_tool_steps"))
+
+
+def steps_setting(ctx: NodeContext, key: str, default: int = 5) -> int:
+    value = ctx.data.get(key)
+    valid = isinstance(value, int) and not isinstance(value, bool) and value > 0
+    return value if valid else default
+
+
+def tools_of(ctx: NodeContext) -> dict[str, AgentTool]:
+    return {t.name: t for t in agent_tools(ctx.run.plan, ctx.node.id)}
+
+
+async def converse(
+    ctx: NodeContext,
+    system_prompt: str,
+    max_steps: int,
+    tools: dict[str, AgentTool] | None = None,
+) -> NodeResult:
+    """The agent loop shared by Agent and Supervisor: system prompt + Task, then up to
+    `max_steps` rounds of tool calls before the model has to answer."""
     model = ctx.data.get("model")
     if not isinstance(model, str) or not model.strip():
         raise NodeError("Choose a model")
@@ -29,7 +54,7 @@ async def agent(ctx: NodeContext) -> NodeResult:
         raise NodeError("The Task is empty — nothing to send to the model")
 
     messages: list[Message] = []
-    if system := ctx.field("system_prompt").strip():
+    if system := system_prompt.strip():
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": task})
 
@@ -44,9 +69,7 @@ async def agent(ctx: NodeContext) -> NodeResult:
     )
 
     temperature = ctx.data.get("temperature")
-    max_steps = ctx.data.get("max_tool_steps")
-    max_steps = max_steps if isinstance(max_steps, int) and max_steps > 0 else 5
-    tools = {t.name: t for t in agent_tools(ctx.run.plan, ctx.node.id)}
+    tools = tools_of(ctx) if tools is None else tools
     schemas = [t.schema() for t in tools.values()] or None
 
     for step in range(max_steps + 1):

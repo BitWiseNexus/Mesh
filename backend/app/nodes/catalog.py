@@ -192,7 +192,7 @@ def credential(key: str, label: str, providers: list[str], **kw: Any) -> FieldSp
     return FieldSpec(key=key, label=label, kind="credential", providers=providers, **kw)
 
 
-def agent_fields(*extra: FieldSpec) -> list[FieldSpec]:
+def agent_fields(*extra: FieldSpec, system_help: str | None = None) -> list[FieldSpec]:
     return [
         FieldSpec(
             key="model",
@@ -213,6 +213,7 @@ def agent_fields(*extra: FieldSpec) -> list[FieldSpec]:
             rows=6,
             placeholder="You are a helpful assistant…",
             templated=True,
+            help=system_help,
         ),
         textarea(
             "prompt",
@@ -356,14 +357,23 @@ _SPECS: list[NodeSpec] = [
         type=T.AGENT_SUPERVISOR,
         ref_prefix="supervisor",
         output_hint="The combined answer (text)",
-        coming_soon=True,
         category=NodeCategory.AGENT,
         inputs=[IN, TOOL],  # TOOL: attachable to another agent as a tool / worker
         outputs=[OUT, TOOLS],
         label="Supervisor Agent",
         description="Delegates sub-tasks to connected worker agents and combines their results.",
         **with_tool_description(
-            agent_fields(number("max_rounds", "Max delegation rounds", 1, 20)),
+            agent_fields(
+                number(
+                    "max_rounds",
+                    "Max delegation rounds",
+                    1,
+                    20,
+                    help="Rounds of handing out work before it has to answer.",
+                ),
+                system_help="Added to its built-in instructions (lead the team connected to its "
+                "Tools handle, delegate, combine the results).",
+            ),
             {
                 "model": FALLBACK_MODEL,
                 "credential_id": None,
